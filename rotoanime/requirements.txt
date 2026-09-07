@@ -1,0 +1,4 @@
+# rotoanime 専用。ルートの requirements.txt（Streamlit アプリ用）とは別管理。
+opencv-python-headless==4.12.0.88
+numpy==1.26.4
+mediapipe==0.10.14
