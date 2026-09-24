@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rakuten-trading-mcp"
+version = "0.1.0"
+description = "楽天証券（マーケットスピード II RSS）を MCP 経由で Claude から操作する実験的サーバー"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=2.2,<3",
+    # RSS（Excel COM）連携用。Windows でのみ必要。
+    "pywin32>=311; sys_platform == 'win32'",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+rakuten-trading-mcp = "rakuten_trading_mcp.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+# 日本語のメッセージ文字列は折り返せないため行長は formatter に任せる
+ignore = ["E501"]

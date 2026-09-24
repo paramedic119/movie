@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "rakuten": {
+      "type": "stdio",
+      "command": "C:\\trading\\rakuten-trading-mcp\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "rakuten_trading_mcp"],
+      "env": {
+        "RAKUTEN_MCP_CONFIG": "C:\\trading\\rakuten-trading-mcp\\config.toml"
+      }
+    }
+  }
+}

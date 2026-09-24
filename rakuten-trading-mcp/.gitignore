@@ -1,0 +1,9 @@
+# 監査ログ・模擬口座・発注ID（個人の取引情報を含むのでコミットしない）
+data/
+# 個人の設定（examples/config.example.toml をコピーして作る）
+config.toml
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+# scheduled_session.ps1 の実行ログ
+examples/logs/
