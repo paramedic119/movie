@@ -271,3 +271,28 @@ def test_helpers():
     assert _status_from_text("取消済", 100, 0) is OrderStatus.CANCELLED
     assert _status_from_text("一部約定", 200, 100) is OrderStatus.OPEN
     assert _status_from_text("？", 100, 0) is OrderStatus.UNKNOWN
+
+
+def test_unreadable_positions_are_flagged(rss, session):
+    session.sheet(LIST_SHEETS["positions"]).grid = [["RSS 未接続"]]  # 見出しが出ていない
+    account = rss.get_account()
+    assert account.positions == [] and account.positions_known is False
+
+
+def test_same_symbol_in_multiple_account_types_is_merged(rss, session):
+    session.sheet(LIST_SHEETS["positions"]).grid = [
+        ["銘柄コード", "口座区分", "保有数量", "平均取得価額", "現在値", "評価損益額"],
+        ["7203", "特定", 100, 2800, 2850, 5000],
+        ["7203", "NISA", 100, 2900, 2850, -5000],
+    ]
+    [p] = rss.get_account().positions
+    assert (p.quantity, p.avg_price, p.unrealized_pnl) == (200, 2850, 0)
+
+
+def test_fill_price_is_read_from_order_list(rss, session):
+    session.sheet(LIST_SHEETS["orders"]).grid = [
+        ["注文番号", "銘柄コード", "売買区分", "注文数量", "約定数量", "注文単価", "約定単価", "注文状況"],
+        ["N0001", "7203", "現物買", 100, 100, 2860, 2851, "約定"],
+    ]
+    [o] = rss.list_orders()
+    assert o.status is OrderStatus.FILLED and o.avg_fill_price == 2851

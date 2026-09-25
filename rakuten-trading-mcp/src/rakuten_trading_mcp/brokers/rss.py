@@ -115,8 +115,8 @@ def _as_rows(values: Any) -> list[list[Any]]:
     return [list(r) if isinstance(r, tuple) else [r] for r in values]
 
 
-def _parse_table(grid: list[list[Any]], header_candidates: list[str]) -> list[dict[str, Any]]:
-    """見出し候補を含む最初の行を見出しとみなし、その下の行を dict のリストにする。"""
+def _parse_table(grid: list[list[Any]], header_candidates: list[str]) -> list[dict[str, Any]] | None:
+    """見出し候補を含む最初の行を見出しとみなし、その下の行を dict のリストにする。見出しが無ければ None。"""
     wanted = set(header_candidates)
     for i, row in enumerate(grid):
         header = [str(h).strip() if h is not None else "" for h in row]
@@ -127,7 +127,7 @@ def _parse_table(grid: list[list[Any]], header_candidates: list[str]) -> list[di
                     break
                 out.append({h: _clean(v) for h, v in zip(header, data, strict=False) if h})
             return out
-    return []
+    return None
 
 
 def _labeled_value(grid: list[list[Any]], labels: list[str]) -> float | None:
@@ -234,19 +234,23 @@ class RssSession:
 
     def wait_for_table(
         self, ws: Any, header_candidates: list[str], min_rows: int, timeout: float
-    ) -> list[dict[str, Any]]:
-        """表が min_rows 行以上になるか、行数が 0.6 秒ほど変わらなくなるまで待って読む。"""
+    ) -> list[dict[str, Any]] | None:
+        """表が min_rows 行以上になるか、行数が 0.6 秒ほど変わらなくなるまで待って読む。
+
+        見出し行が最後まで見つからなければ None（読めなかった）を返す。
+        """
         deadline = time.monotonic() + timeout
         last_len, stable = -1, 0
-        rows: list[dict[str, Any]] = []
+        rows: list[dict[str, Any]] | None = None
         while time.monotonic() < deadline:
             rows = _parse_table(self.read_grid(ws), header_candidates)
-            if len(rows) >= min_rows:
-                return rows
-            stable = stable + 1 if len(rows) == last_len else 0
-            if stable >= 3 and (rows or last_len == 0):
-                return rows
-            last_len = len(rows)
+            if rows is not None:
+                if len(rows) >= min_rows:
+                    return rows
+                stable = stable + 1 if len(rows) == last_len else 0
+                if stable >= 3:
+                    return rows
+                last_len = len(rows)
             time.sleep(0.2)
         return rows
 
@@ -325,6 +329,7 @@ class RssMarketData(MarketData):
         self.session.set_formula(ws.Range("A1"), formula)
         cols = self.s.columns
         rows = self.session.wait_for_table(ws, cols["chart_date"], count, self.s.calc_timeout_seconds)
+        rows = rows or []
         bars = [
             Bar(
                 date=str(_pick(r, cols["chart_date"])),
@@ -369,7 +374,7 @@ class RssBroker(Broker):
             self.session.set_formula(ws.Range("A1"), self.s.formulas[kind])
         return ws
 
-    def _read_table(self, kind: str) -> list[dict[str, Any]]:
+    def _read_table(self, kind: str) -> list[dict[str, Any]] | None:
         ws = self._list_sheet(kind)
         header = self.s.columns[LIST_HEADER_KEYS[kind]]
         return self.session.wait_for_table(ws, header, 10**9, min(self.s.calc_timeout_seconds, 3.0))
@@ -386,8 +391,8 @@ class RssBroker(Broker):
         cols = self.s.columns
         rows = self.session.call(self._read_table, "positions")
         cash, capacity_grid = self.session.call(self._read_capacity)
-        positions = []
-        for r in rows:
+        positions: dict[str, Position] = {}
+        for r in rows or []:
             raw_symbol, qty = _pick(r, cols["symbol"]), _num(_pick(r, cols["quantity"]))
             if raw_symbol is None or qty is None:
                 continue
@@ -395,25 +400,30 @@ class RssBroker(Broker):
                 symbol = normalize_symbol(str(raw_symbol))
             except ValueError:
                 continue
-            positions.append(
-                Position(
-                    symbol=symbol,
-                    quantity=int(qty),
-                    avg_price=_num(_pick(r, cols["avg_price"])),
-                    name=_pick(r, cols["name"]),
-                    market_price=_num(_pick(r, cols["market_price"])),
-                    unrealized_pnl=_num(_pick(r, cols["unrealized_pnl"])),
-                    raw=r,
-                )
+            row = Position(
+                symbol=symbol,
+                quantity=int(qty),
+                avg_price=_num(_pick(r, cols["avg_price"])),
+                name=_pick(r, cols["name"]),
+                market_price=_num(_pick(r, cols["market_price"])),
+                unrealized_pnl=_num(_pick(r, cols["unrealized_pnl"])),
+                raw=r,
             )
+            positions[symbol] = _merge_positions(positions[symbol], row) if symbol in positions else row
         # 評価額の合計は RSS から確実に取れないため None（日次損失チェックは行われない）
         capacity = [[_clean(v) for v in row] for row in capacity_grid[:20]]
-        return AccountSnapshot(cash_available=cash, positions=positions, equity=None, raw={"capacity": capacity})
+        return AccountSnapshot(
+            cash_available=cash,
+            positions=list(positions.values()),
+            equity=None,
+            raw={"capacity": capacity},
+            positions_known=rows is not None,
+        )
 
     def list_orders(self) -> list[Order]:
         cols = self.s.columns
         orders = []
-        for r in self.session.call(self._read_table, "orders"):
+        for r in self.session.call(self._read_table, "orders") or []:
             order_no, raw_symbol = _pick(r, cols["order_no"]), _pick(r, cols["symbol"])
             if order_no is None or raw_symbol is None:
                 continue
@@ -437,6 +447,7 @@ class RssBroker(Broker):
                     status=_status_from_text(status_text, qty, filled),
                     created_at="",
                     filled_quantity=filled,
+                    avg_fill_price=_num(_pick(r, cols["filled_price"])),
                     broker_order_no=str(order_no),
                     message=status_text or None,
                     raw=r,
@@ -449,7 +460,7 @@ class RssBroker(Broker):
         cols = self.s.columns
 
         def read() -> dict[str, Any] | None:
-            for r in _parse_table(self.session.read_grid(ws), cols["order_id"]):
+            for r in _parse_table(self.session.read_grid(ws), cols["order_id"]) or []:
                 if _num(_pick(r, cols["order_id"])) == order_id:
                     return r
             return None
@@ -540,6 +551,22 @@ class RssBroker(Broker):
             except BrokerError as e:
                 out[sheet] = f"エラー: {e}"
         return out
+
+
+def _merge_positions(a: Position, b: Position) -> Position:
+    """同じ銘柄が口座区分ごとに複数行ある場合に 1 つにまとめる。"""
+    qty = a.quantity + b.quantity
+    avg = (a.quantity * a.avg_price + b.quantity * b.avg_price) / qty if qty and a.avg_price and b.avg_price else None
+    pnl = (a.unrealized_pnl or 0) + (b.unrealized_pnl or 0) if a.unrealized_pnl is not None else b.unrealized_pnl
+    return Position(
+        symbol=a.symbol,
+        quantity=qty,
+        avg_price=avg,
+        name=a.name or b.name,
+        market_price=a.market_price or b.market_price,
+        unrealized_pnl=pnl,
+        raw={"rows": [a.raw, b.raw]},
+    )
 
 
 def _status_from_text(text: str, quantity: int, filled: int) -> OrderStatus:

@@ -1,5 +1,6 @@
-# rakuten-trading-mcp の設定例。コピーして config.toml として使う。
-# 相対パスはこのファイルのあるフォルダが基準。未知のキーはエラーになる（書き間違い防止）。
+# rakuten-trading-mcp の設定例（全項目の説明）。
+# 普段は `python -m rakuten_trading_mcp init` が作る config.toml を使い、必要な項目だけここから書き足す。
+# 相対パスは設定ファイルのあるフォルダが基準。未知のキーはエラーになる（書き間違い防止）。
 
 # "paper" = 模擬売買（既定） / "live" = 楽天証券に実際に発注
 # live にするには、さらに環境変数 RAKUTEN_MCP_LIVE=yes が必要（誤って実弾で起動しないための二重確認）
@@ -8,8 +9,8 @@ mode = "paper"
 # 発注前の人間の承認方式
 #   "elicit" = サーバーが確認ダイアログ（MCP elicitation）を出し、承認された注文だけ発注する（推奨）。
 #              ダイアログに対応していないクライアントでは発注できない（安全側に倒れる）。
-#   "client" = サーバー側では確認しない。Claude Desktop / Claude Code のツール実行許可に任せる。
-#              無人のスケジュール実行はこちら（place_order を許可ツールに入れる）。
+#   "client" = サーバー側では確認しない（おまかせ）。Claude Code のツール実行許可に任せる。
+#              無人のスケジュール実行もこちら。live で使うには [budget] の設定が必須。
 approval_mode = "elicit"
 
 # 監査ログ・模擬口座・発注ID などの保存先
@@ -43,9 +44,18 @@ market_holidays = [
   "2026-09-21", "2026-09-22", "2026-09-23", "2026-10-12", "2026-11-03", "2026-11-23",
 ]
 
+[budget]
+# Claude に任せる運用予算。設定ファイルでしか変えられない（Claude が自分で増やすことはできない）。
+# 対象は risk.allowed_symbols の銘柄だけ（予算を使うときは allowed_symbols の指定が必須）。
+# 予算を始める前から持っている株はあなたの持ち分として扱い、Claude は売らない。
+enabled = false
+amount_jpy = 100000        # 保有株の取得原価 + 未約定の買い注文 の合計の上限
+max_loss_jpy = 20000       # 予算全体の損失（確定 + 含み）がこれに達したら新規の買いを止める（0 で無効）
+reinvest_profits = false   # true にすると、確定した利益の分だけ買える額が増える
+
 [paper]
 initial_cash_jpy = 1000000
-# "static" = quotes.sample.json の値で模擬（どの OS でも動く）
+# "static" = quotes.sample.json の値で模擬（どの OS でも動く。init コマンドがサンプルを置く）
 # "rss"    = マーケットスピード II RSS の本物の株価で模擬売買（Windows のみ。本番前の確認に最適）
 market_data = "static"
 static_quotes_file = "quotes.sample.json"

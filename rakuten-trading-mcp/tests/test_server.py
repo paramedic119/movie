@@ -5,12 +5,15 @@ MCP のプロトコル版によって確認ダイアログ（elicitation）の�
 """
 
 import json
+import time
 
 import anyio
 import mcp_types as types
 import pytest
 from mcp import Client
 
+from rakuten_trading_mcp.brokers.paper import PaperBroker
+from rakuten_trading_mcp.config import BudgetSettings
 from rakuten_trading_mcp.server import TradingApp, build_server, verify_approval_is_server_side
 
 pytestmark = pytest.mark.anyio
@@ -197,3 +200,59 @@ async def test_parallel_orders_cannot_bypass_limits(settings, broker, clock, pro
     assert sorted(r["placed"] for r in results.values()) == [False, True]
     blocked = next(r for r in results.values() if not r["placed"])
     assert any("秒しか経っていません" in v for v in blocked["violations"])
+
+
+@pytest.mark.parametrize("protocol", PROTOCOLS)
+async def test_delegated_trading_within_budget(settings, broker, clock, protocol):
+    """確認ダイアログなし（おまかせ）でも、予算の範囲を超える買いはサーバーが止める。"""
+    settings.approval_mode = "client"
+    settings.budget = BudgetSettings(enabled=True, amount_jpy=300_000, max_loss_jpy=20_000)
+    app = TradingApp(settings, broker=broker, clock=clock)
+    async with Client(build_server(app), mode=protocol) as client:
+        status = data(await client.call_tool("get_status", {}))
+        assert status["budget"]["enabled"] and status["budget"]["remaining_jpy"] == 300_000
+
+        p = await preview(client)
+        assert p["budget_remaining_jpy"] == 300_000
+        assert data(await client.call_tool("place_order", {"confirmation_token": p["confirmation_token"]}))["placed"]
+
+        budget = data(await client.call_tool("get_status", {}))["budget"]
+        assert budget["invested_jpy"] == 285_100  # 模擬売買では売気配 2,851円で約定
+        assert budget["remaining_jpy"] == 14_900
+        assert budget["holdings"][0]["symbol"] == "7203"
+
+        clock.advance(31)
+        over = await preview(client, symbol="6758", limit_price=3505)
+        assert over["accepted"] is False
+        assert any("予算の残り" in v for v in over["violations"])
+
+        account = data(await client.call_tool("get_account", {}))
+        assert account["budget"]["invested_jpy"] == 285_100
+        journal = data(await client.call_tool("get_journal", {}))
+        assert "budget_fill" in [e["event"] for e in journal["entries"]]
+
+
+class SlowPaperBroker(PaperBroker):
+    """約定してから結果が返るまでに時間がかかる証券会社。"""
+
+    def place_order(self, request):
+        order = super().place_order(request)
+        time.sleep(0.3)
+        return order
+
+
+async def test_fill_during_placement_is_attributed_to_claude(settings, market, clock):
+    """発注の結果が返る前に別の呼び出しで口座を照合しても、約定分を Claude の持ち分として数える。"""
+    settings.approval_mode = "client"
+    settings.budget = BudgetSettings(enabled=True, amount_jpy=300_000)
+    broker = SlowPaperBroker(market, settings.data_dir / "paper.json", initial_cash=1_000_000, clock=clock)
+    app = TradingApp(settings, broker=broker, clock=clock)
+    async with Client(build_server(app), mode="legacy") as client:
+        await client.call_tool("get_status", {})  # 予算の基準（0 株）を記録
+        p = await preview(client)
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(client.call_tool, "place_order", {"confirmation_token": p["confirmation_token"]})
+            await anyio.sleep(0.1)
+            tg.start_soon(client.call_tool, "get_status", {})
+        budget = data(await client.call_tool("get_status", {}))["budget"]
+    assert [(h["symbol"], h["quantity"]) for h in budget["holdings"]] == [("7203", 100)]

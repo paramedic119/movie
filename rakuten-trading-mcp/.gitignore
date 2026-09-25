@@ -7,3 +7,10 @@ config.toml
 .ruff_cache/
 # scheduled_session.ps1 の実行ログ
 examples/logs/
+# init コマンドが作るローカル設定（パスや許可設定を含むのでコミットしない）
+/.mcp.json
+/.claude/settings.local.json
+/quotes.sample.json
+# pip wheel / build の生成物
+/build/
+/dist/

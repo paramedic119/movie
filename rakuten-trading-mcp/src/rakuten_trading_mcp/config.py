@@ -59,6 +59,7 @@ DEFAULT_COLUMNS: dict[str, list[str]] = {
     "side": ["売買区分", "売買"],
     "order_quantity": ["注文数量", "数量"],
     "filled_quantity": ["約定数量"],
+    "filled_price": ["約定単価", "平均約定単価", "約定価格"],
     "order_price": ["注文単価", "注文価格"],
     "order_status": ["注文状況", "状態", "ステータス"],
     "chart_date": ["日付"],
@@ -122,12 +123,23 @@ class RssSettings:
 
 
 @dataclass
+class BudgetSettings:
+    """Claude に任せる運用予算。設定ファイルでしか変えられない（Claude が自分で増やすことはできない）。"""
+
+    enabled: bool = False
+    amount_jpy: float = 100_000  # 保有株の取得原価 + 未約定の買い注文 の合計の上限
+    max_loss_jpy: float = 20_000  # 予算開始からの損失（確定 + 含み）がこれに達したら新規の買いを止める（0 で無効）
+    reinvest_profits: bool = False  # 確定した利益の分だけ、買える額を増やすか
+
+
+@dataclass
 class Settings:
     mode: str = "paper"
     approval_mode: str = "elicit"
     data_dir: Path = Path("data")
     confirmation_ttl_seconds: int = 180
     risk: RiskSettings = field(default_factory=RiskSettings)
+    budget: BudgetSettings = field(default_factory=BudgetSettings)
     paper: PaperSettings = field(default_factory=PaperSettings)
     rss: RssSettings = field(default_factory=RssSettings)
     config_path: Path | None = None
@@ -168,6 +180,7 @@ def load_settings(path: str | Path | None = None, *, environ: dict[str, str] | N
         config_path = None
 
     risk_raw = dict(raw.pop("risk", {}))
+    budget_raw = dict(raw.pop("budget", {}))
     paper_raw = dict(raw.pop("paper", {}))
     rss_raw = dict(raw.pop("rss", {}))
 
@@ -178,6 +191,7 @@ def load_settings(path: str | Path | None = None, *, environ: dict[str, str] | N
 
     settings: Settings = _build(Settings, raw, "（トップレベル）", exclude=frozenset({"config_path"}))
     settings.risk = _build(RiskSettings, risk_raw, "risk")
+    settings.budget = _build(BudgetSettings, budget_raw, "budget")
     settings.paper = _build(PaperSettings, paper_raw, "paper")
     settings.rss = _build(RssSettings, rss_raw, "rss")
     settings.config_path = config_path
@@ -216,3 +230,17 @@ def _validate(s: Settings, env: dict[str, str]) -> None:
         r.denied_symbols = [normalize_symbol(x) for x in r.denied_symbols]
     except ValueError as e:
         raise ConfigError(f"risk の銘柄リスト: {e}") from e
+    b = s.budget
+    if b.enabled:
+        if b.amount_jpy <= 0 or b.max_loss_jpy < 0:
+            raise ConfigError("budget.amount_jpy は正の数、budget.max_loss_jpy は 0 以上にしてください")
+        if not r.allowed_symbols:
+            raise ConfigError(
+                "予算（[budget]）を使うときは risk.allowed_symbols で Claude に任せる銘柄を指定してください。"
+                "予算の対象はその銘柄だけになります"
+            )
+    if s.is_live and s.approval_mode == "client" and not b.enabled:
+        raise ConfigError(
+            "承認なし（approval_mode = 'client'）で live にするには、[budget] で予算を設定してください。"
+            "Claude に任せる金額の上限を決めずに実弾で任せることはできません"
+        )

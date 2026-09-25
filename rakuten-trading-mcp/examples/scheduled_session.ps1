@@ -1,8 +1,10 @@
 # 平日の決まった時刻に、Windows のタスクスケジューラから Claude Code をヘッドレスで実行する例（無人運用）。
 #
 # 前提:
-#   - config.toml で approval_mode = "client"（ヘッドレス実行では確認ダイアログを出せず、elicit だと発注されない）
-#   - リスク上限を対話型のときより小さくしておく
+#   - プロジェクトのフォルダ（このファイルの 1 つ上）で、おまかせ設定を作ってある:
+#       python -m rakuten_trading_mcp init --delegate --budget 100000 --symbols 7203,9432
+#     （ヘッドレス実行では確認ダイアログを出せないため、確認モードでは発注されない）
+#   - リスク上限と予算を、対話型のときより小さくしておく
 #   - live / paper+rss の場合は Excel + マーケットスピード II RSS を起動・接続しておく
 #   - Claude Code（claude コマンド）にログイン済み
 #
@@ -13,6 +15,8 @@
 
 $ErrorActionPreference = "Stop"
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
+$root = Split-Path -Parent $here
+Set-Location $root
 $logDir = Join-Path $here "logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $log = Join-Path $logDir ("session-" + (Get-Date -Format "yyyyMMdd-HHmm") + ".json")
@@ -34,7 +38,7 @@ $tools = @(
 )
 
 claude -p $prompt `
-    --mcp-config (Join-Path $here "mcp.json") `
+    --mcp-config (Join-Path $root ".mcp.json") `
     --strict-mcp-config `
     --allowedTools $tools `
     --max-turns 30 `

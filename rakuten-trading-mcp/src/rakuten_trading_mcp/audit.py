@@ -9,7 +9,7 @@ import json
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -66,7 +66,18 @@ class AuditLog:
                         continue  # 途中で切れた行は無視
         return out
 
-    def daily_stats(self, day: date | None = None) -> DailyStats:
+    def events_since(self, start: str, events: frozenset[str], max_days: int = 14) -> list[dict[str, Any]]:
+        """start（YYYY-MM-DD）から今日までの、指定したイベントを古い順に返す（最大 max_days 日分）。"""
+        today = self._today()
+        day = max(date.fromisoformat(start), today - timedelta(days=max_days))
+        out: list[dict[str, Any]] = []
+        while day <= today:
+            out.extend(e for e in self.entries(day) if e.get("event") in events)
+            day += timedelta(days=1)
+        return out
+
+    def daily_stats(self, day: date | None = None, equity_kind: str = "account") -> DailyStats:
+        """equity_kind: 日次損失の基準にする評価額の種類（"account" = 口座 / "budget" = 予算）。"""
         stats = DailyStats()
         for e in self.entries(day):
             event = e.get("event")
@@ -79,11 +90,15 @@ class AuditLog:
                     stats.last_order_at = ts
             elif event in CANCEL_EVENTS:
                 stats.cancels += 1
-            elif event == "equity_snapshot" and stats.day_start_equity is None:
+            elif (
+                event == "equity_snapshot"
+                and e.get("kind", "account") == equity_kind
+                and stats.day_start_equity is None
+            ):
                 stats.day_start_equity = float(e["equity"])
         return stats
 
-    def ensure_day_start_equity(self, equity: float | None) -> None:
+    def ensure_day_start_equity(self, equity: float | None, kind: str = "account") -> None:
         """その日最初に評価額を取得できたときに記録し、日次損失の基準にする。"""
-        if equity is not None and self.daily_stats().day_start_equity is None:
-            self.record("equity_snapshot", equity=equity)
+        if equity is not None and self.daily_stats(equity_kind=kind).day_start_equity is None:
+            self.record("equity_snapshot", equity=equity, kind=kind)

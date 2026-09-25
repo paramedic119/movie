@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .audit import DailyStats
+from .budget import BudgetStatus
 from .config import RiskSettings
 from .market_hours import SESSION_TEXT, is_market_open
 from .models import ACTIVE_STATUSES, AccountSnapshot, Order, OrderRequest, OrderType, Quote, Side, now_jst
@@ -56,6 +57,7 @@ class RiskManager:
         account: AccountSnapshot,
         stats: DailyStats,
         open_orders: Iterable[Order] = (),
+        budget: BudgetStatus | None = None,
     ) -> RiskDecision:
         s = self.s
         d = RiskDecision()
@@ -117,6 +119,17 @@ class RiskManager:
                         f"発注後の {req.symbol} の保有額が 1 銘柄の上限 {s.max_position_value_jpy:,.0f}円 を超えます"
                         f"（保有 {held * ref:,.0f}円 + 今回 {notional:,.0f}円）"
                     )
+                if budget is not None:
+                    if budget.loss_limit_reached:
+                        v.append(
+                            f"予算の損益が損失上限に達したため、新規の買いを止めています（損益 {budget.total_pnl_jpy:,.0f}円"
+                            f" / 上限 −{budget.max_loss_jpy:,.0f}円）。売りは可能です"
+                        )
+                    if notional > budget.remaining_jpy:
+                        v.append(
+                            f"予算の残り {budget.remaining_jpy:,.0f}円 を超えます（今回 {notional:,.0f}円 / 予算"
+                            f" {budget.amount_jpy:,.0f}円）"
+                        )
             else:
                 committed = sum(
                     o.remaining_quantity
@@ -127,6 +140,14 @@ class RiskManager:
                     v.append(
                         f"売却可能数量を超えています（保有 {held}株 − 発注中の売り {committed}株）。空売りには対応していません"
                     )
+                if budget is not None:
+                    holding = budget.holding(req.symbol)
+                    own = holding.quantity if holding else 0
+                    if req.quantity > own - committed:
+                        v.append(
+                            f"予算で買った {req.symbol} の持ち分（{own}株 − 発注中の売り {committed}株）を超える売りはできません。"
+                            "予算を始める前からの保有は、あなたの持ち分として扱います"
+                        )
 
         if stats.orders_placed >= s.max_daily_orders:
             v.append(f"本日の発注回数が上限（{s.max_daily_orders}回）に達しました")
@@ -137,9 +158,10 @@ class RiskManager:
                     f"前回の発注から {elapsed:.0f} 秒しか経っていません（最低 {s.min_seconds_between_orders:.0f} 秒あける設定）"
                 )
 
+        equity = budget.value_jpy if budget is not None else account.equity
         if s.max_daily_loss_jpy > 0:
-            if stats.day_start_equity is not None and account.equity is not None:
-                loss = stats.day_start_equity - account.equity
+            if stats.day_start_equity is not None and equity is not None:
+                loss = stats.day_start_equity - equity
                 if loss >= s.max_daily_loss_jpy and req.side is Side.BUY:
                     v.append(
                         f"本日の評価損失が上限に達したため新規の買いを停止しています"

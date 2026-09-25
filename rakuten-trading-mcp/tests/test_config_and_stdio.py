@@ -7,6 +7,7 @@ from mcp import Client, StdioServerParameters
 from rakuten_trading_mcp.config import ConfigError, load_settings
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
+SAMPLES = Path(__file__).resolve().parents[1] / "src" / "rakuten_trading_mcp" / "samples"
 
 
 def write_config(tmp_path: Path, body: str) -> Path:
@@ -31,6 +32,8 @@ def test_example_config_loads():
         ('approval_mode = "auto"\n', "approval_mode"),
         ('[risk]\nallowed_symbols = ["toyota"]\n', "銘柄コード"),
         ('[rss.columns]\nfoo = ["x"]\n', "不明なキー"),
+        ("[budget]\nenabled = true\n", "allowed_symbols"),
+        ('[risk]\nallowed_symbols = ["7203"]\n[budget]\nenabled = true\namount_jpy = 0\n', "amount_jpy"),
     ],
 )
 def test_invalid_configs_are_rejected(tmp_path, body, fragment):
@@ -43,10 +46,20 @@ def test_live_mode_requires_env_var(tmp_path):
     assert load_settings(path, environ={"RAKUTEN_MCP_LIVE": "yes"}).is_live
 
 
+def test_live_delegation_requires_budget(tmp_path):
+    live = {"RAKUTEN_MCP_LIVE": "yes"}
+    no_budget = write_config(tmp_path, 'mode = "live"\napproval_mode = "client"\n')
+    with pytest.raises(ConfigError, match="予算"):
+        load_settings(no_budget, environ=live)
+    body = 'mode = "live"\napproval_mode = "client"\n[risk]\nallowed_symbols = ["7203"]\n[budget]\nenabled = true\n'
+    settings = load_settings(write_config(tmp_path, body), environ=live)
+    assert settings.budget.enabled and settings.budget.amount_jpy == 100_000
+
+
 @pytest.mark.anyio
 async def test_stdio_server_process(tmp_path):
     """実際に `python -m rakuten_trading_mcp` を子プロセスで起動し、stdio 経由でツールを呼ぶ。"""
-    quotes = (EXAMPLES / "quotes.sample.json").as_posix()
+    quotes = (SAMPLES / "quotes.sample.json").as_posix()
     config = write_config(
         tmp_path,
         f'data_dir = "data"\n[paper]\nstatic_quotes_file = "{quotes}"\n[risk]\nallowed_symbols = ["7203"]\n',

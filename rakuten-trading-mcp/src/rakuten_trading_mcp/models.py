@@ -107,6 +107,7 @@ class AccountSnapshot:
     positions: list[Position] = field(default_factory=list)
     equity: float | None = None  # 現金 + 保有株評価額（取得できる場合）
     raw: dict[str, Any] | None = None
+    positions_known: bool = True  # False = 保有一覧を読めなかった（空とは限らない）
 
     def position(self, symbol: str) -> Position | None:
         return next((p for p in self.positions if p.symbol == symbol), None)
