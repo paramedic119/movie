@@ -4,6 +4,7 @@
 
 - 楽天証券には公式の発注 API がないため、公式の自動発注手段である **マーケットスピード II RSS（Excel アドイン）を Python から操作**します。
 - 最初は**模擬売買（paper）**で動きます。実際に発注する `live` モードは、設定と環境変数の二重の切り替えが必要です。
+- Linux / macOS でも、[J-Quants API](https://jpx-jquants.com/) の日足で**模擬売買**や**過去の相場での早送り（リプレイ）**ができます（→ [Linux で動かす](#linux-で動かす)）。楽天証券への実際の発注には Windows が必要です。
 - 使い方は 2 通りです。
   - **確認モード**（既定）: Claude が注文を出すたびに確認ダイアログが出て、あなたが承認したものだけが発注されます。
   - **おまかせモード**: 確認なしで Claude が発注します。**予算（Claude に任せる金額）**と損失上限を決めて、その範囲で売買させます。
@@ -23,12 +24,12 @@ Claude Code / Claude Desktop（あなたの PC 上で動かす）
    │ MCP（stdio）
    ▼
 rakuten-trading-mcp ── リスクチェック / 予算 / 承認ダイアログ / 監査ログ
-   │ paper: 模擬口座（JSON）       live: COM（pywin32）
-   ▼                               ▼
-サンプル株価 or RSS の株価        Excel + マーケットスピード II RSS → 楽天証券
+   │ paper: 模擬口座（JSON）                    live: COM（pywin32）
+   ▼                                            ▼
+サンプル株価 / 日足（J-Quants）/ RSS の株価      Excel + マーケットスピード II RSS → 楽天証券
 ```
 
-すべて同じ Windows PC 上で動かします（paper + サンプル株価なら macOS / Linux でも動きます）。
+楽天証券につなぐ部分（RSS）は、すべて同じ Windows PC 上で動かします。サンプル株価と日足（J-Quants）での模擬売買は macOS / Linux でも動きます。
 
 ## ツール
 
@@ -43,6 +44,8 @@ rakuten-trading-mcp ── リスクチェック / 予算 / 承認ダイアロ�
 | `place_order` | 確認トークンの注文を発注（確認モードでは承認ダイアログつき） |
 | `cancel_order` | 未約定の注文を取り消す |
 | `get_journal` | 監査ログ（判断理由つき） |
+| `get_report` | 模擬売買の成績（評価額の推移・騰落率・最大ドローダウン・各銘柄を持ち続けた場合との比較） |
+| `advance_day` | リプレイを次の取引日に進める（リプレイ中だけ） |
 
 ## クイックスタート（模擬売買・どの OS でも）
 
@@ -112,8 +115,102 @@ claude
 ## 模擬売買の結果を見る・やり直す
 
 - Claude に「get_status と get_journal で今日の売買と予算の状況をまとめて」と頼むと、判断の理由つきで振り返れます。
+- 「get_report で成績を見せて」と頼むと、評価額の推移・騰落率・最大ドローダウンと、各銘柄をただ持っていた場合との比較がわかります。
 - ファイルでは、`data/audit/日付.jsonl`（すべての判断と発注の記録）、`data/paper_account.json`（模擬口座の現金・保有・注文）、`data/budget.json`（予算の台帳）にあります。
-- 最初からやり直すときは、Claude Code を閉じてから `data` フォルダを削除します（模擬口座は 100 万円、予算は未使用に戻ります）。
+- 最初からやり直すときは、Claude Code を閉じてから `data` フォルダを削除します（模擬口座は 100 万円、予算は未使用に戻ります）。リプレイの記録は `data-replay` フォルダにあります。
+
+## Linux で動かす
+
+楽天証券への発注に使う RSS は Windows の Excel アドインなので、Linux では**模擬売買**になります。株価は日本取引所グループの [J-Quants API](https://jpx-jquants.com/) から日足を取得して使います。
+
+| 使い方 | 内容 | J-Quants のプラン |
+|---|---|---|
+| **リプレイ**（まずはこちら） | 過去の期間を 1 日ずつ早送りしながら Claude が売買し、最後に成績を出す | 無料プランで足りる（12 週間遅れ・過去約 2 年分） |
+| **日々の模擬売買** | 毎営業日の大引け後に最新の日足を取得し、Claude が翌営業日の注文を出す | 当日の日足が要るので有料（ライト: 月額 1,650 円） |
+
+実際に発注するときは、Windows の PC（または Windows の仮想マシン）で下の「楽天証券（RSS）につなぐ手順」を行います。Linux から実際に発注するには、立花証券 e支店 の API のような OS を問わない API に対応するブローカーの追加が必要です（未実装。→ [docs/DESIGN.md](docs/DESIGN.md) の 6.5）。
+
+### 準備
+
+1. J-Quants に登録し、ダッシュボードで API キーを発行します。
+2. API キーは設定ファイルやチャットには書かず、自分だけが読めるファイルに置いて環境変数 `JQUANTS_API_KEY` から読み込みます（下のスクリプトは、環境変数が無ければこのファイルを直接読みます）。
+
+   ```bash
+   mkdir -p ~/.config/jquants && chmod 700 ~/.config/jquants
+   nano ~/.config/jquants/api_key          # キーを 1 行で保存
+   chmod 600 ~/.config/jquants/api_key
+   echo 'export JQUANTS_API_KEY="$(cat ~/.config/jquants/api_key)"' >> ~/.bashrc
+   ```
+
+3. インストール（Python 3.11 以上と Claude Code が必要）
+
+   ```bash
+   cd rakuten-trading-mcp
+   python3 -m venv .venv && source .venv/bin/activate
+   pip install -e .
+   ```
+
+### リプレイ（過去の相場で早送り）
+
+```bash
+python -m rakuten_trading_mcp init --dir ~/replay --replay 2026-01-05:2026-03-31 \
+    --delegate --budget 300000 --symbols 7203,6758,9432
+python -m rakuten_trading_mcp --config ~/replay/config.toml fetch   # 日足を prices/ に保存
+cd ~/replay && claude
+```
+
+> リプレイを最終日まで進めながら、日足を見て予算の範囲で売買して。1 日ごとに判断して advance_day で進め、最後に get_report で成績を報告して。
+
+- 「今」はリプレイ中の日の大引け後です。Claude にはその日までの日足しか見えず、出した注文は `advance_day` で進めた次の取引日の日足で約定を判定します。
+- `fetch` は、開始日の 150 日前から終了日までを取得します（移動平均などを計算できるように）。無料プランは 12 週間遅れなので、終了日は 12 週間より前にしてください。
+- `get_report` で、評価額の推移・騰落率・最大ドローダウン・約定数と、各銘柄を期間中ずっと持っていた場合の騰落率（比較用）がわかります。
+- 期間が長いと会話が長くなるので、数日ずつ区切って無人で最後まで進めるスクリプトもあります: `examples/linux/replay.sh ~/replay 5`（5 営業日ずつ。途中で止めても続きから）。
+- 別の期間でやり直すときは、`init --replay 新しい期間 --force` のあと `data-replay` フォルダを削除します（期間の違う記録が残っていると起動しません）。
+
+### 日々の模擬売買（有料プラン）
+
+```bash
+python -m rakuten_trading_mcp init --dir ~/trading --market-data csv \
+    --delegate --budget 300000 --symbols 7203,6758,9432
+python -m rakuten_trading_mcp --config ~/trading/config.toml fetch
+```
+
+毎営業日の夕方に `examples/linux/daily_session.sh ~/trading` を実行すると、日足の取得 → Claude Code のヘッドレス実行（[examples/linux/daily_prompt.md](examples/linux/daily_prompt.md) の手順で判断・発注）を行います。注文は翌営業日の日足で約定を判定し、結果は次の日の実行でわかります。日足の取得に失敗した日は Claude を起動しません。
+
+cron の例（PC の時刻が日本時間の場合。UTC なら時刻を 9 時間引く）:
+
+```
+30 18 * * 1-5  $HOME/rakuten-trading-mcp/examples/linux/daily_session.sh $HOME/trading
+```
+
+systemd のユーザータイマーの例（タイムゾーンを指定できる）:
+
+```ini
+# ~/.config/systemd/user/claude-paper.service
+[Service]
+Type=oneshot
+ExecStart=%h/rakuten-trading-mcp/examples/linux/daily_session.sh %h/trading
+
+# ~/.config/systemd/user/claude-paper.timer
+[Timer]
+OnCalendar=Mon..Fri 18:30 Asia/Tokyo
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+```bash
+systemctl --user daemon-reload && systemctl --user enable --now claude-paper.timer
+loginctl enable-linger "$USER"   # ログアウト中も動かすとき
+```
+
+### 日足での約定のしかた（簡易モデル）
+
+- 大引け（15:30）後・休日に出した注文は翌営業日の足、大引け前に出した注文はその日の足で判定します。その足を取得するまでは未約定です。
+- 買いの指値は、始値が指値以下なら始値、安値が指値以下なら指値で約定します（売りはその逆）。取引時間中に出した注文は、すでに過ぎた始値では約定させません。
+- 指値に届かなければ失効します（本日中の注文）。株価は分割などを調整した値を使います。
+- 日々の模擬売買では、最新の日足が 10 日より古いと発注できません（古い株価で判断しないため）。
 
 ## 楽天証券（RSS）につなぐ手順（Windows）
 
@@ -147,6 +244,8 @@ claude
 
 ## 無人で定期実行する
 
+Linux では `examples/linux/daily_session.sh`（日々の模擬売買）と `examples/linux/replay.sh`（リプレイ）を使います（→ [Linux で動かす](#linux-で動かす)）。
+
 Claude Code を開いておかなくても、Windows のタスクスケジューラから平日の決まった時刻に [examples/scheduled_session.ps1](examples/scheduled_session.ps1) を実行すれば、Claude Code がヘッドレスで [examples/session_prompt.md](examples/session_prompt.md) の手順に従って売買します。事前に `init --delegate --budget ...` で設定を作っておいてください。
 
 - 上限は対話型よりさらに小さく。Web 検索など外部情報のツールは許可しないことをおすすめします（ページに仕込まれた指示で判断が歪められるおそれがあるため）。
@@ -163,4 +262,4 @@ pip install -e ".[dev]"
 python -m pytest
 ```
 
-テストは Excel なしで動きます（RSS 部分は偽の Excel で、発注関数に渡す引数の順番・コード値や一覧の読み取りを確認）。MCP の旧プロトコル（2025-11-25）と新プロトコル（2026-07-28）の両方で、承認ダイアログを含む発注フローと、予算つきのおまかせ発注を確認しています。
+テストは Excel もネットワークもなしで動きます（RSS 部分は偽の Excel で、発注関数に渡す引数の順番・コード値や一覧の読み取りを確認。J-Quants は手元で立てた疑似 API サーバーで確認）。MCP の旧プロトコル（2025-11-25）と新プロトコル（2026-07-28）の両方で、承認ダイアログを含む発注フローと、予算つきのおまかせ発注を確認しています。

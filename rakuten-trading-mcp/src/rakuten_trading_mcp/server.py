@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 
 from . import __version__
 from .audit import AuditLog
-from .brokers import CHART_INTERVALS, Broker, BrokerError, make_broker
+from .brokers import CHART_INTERVALS, Broker, BrokerError, make_runtime
 from .budget import CLAUDE_ORDER_EVENTS, BudgetLedger, BudgetStatus
 from .config import Settings
 from .market_hours import SESSION_TEXT
@@ -38,6 +38,7 @@ from .models import (
     to_dict,
 )
 from .pending import PendingOrder, PendingOrderStore
+from .replay import ReplayClock
 from .risk import RiskManager
 
 log = logging.getLogger(__name__)
@@ -66,8 +67,16 @@ DELEGATE_MODE_NOTE = """\
 """
 
 
+REPLAY_NOTE = """\
+- リプレイ（過去の相場の早送り）中です。「今」は get_status の replay.current_date の大引け後で、
+  その日の終値までが見えています。売買を決めたら advance_day で次の取引日へ進めてください
+  （出した注文は、進めた日の日足で約定を判定します）。最終日まで進んだら get_report で成績を報告してください。
+"""
+
+
 def instructions_for(settings: Settings) -> str:
-    return INSTRUCTIONS + (DELEGATE_MODE_NOTE if settings.approval_mode == "client" else CONFIRM_MODE_NOTE)
+    text = INSTRUCTIONS + (DELEGATE_MODE_NOTE if settings.approval_mode == "client" else CONFIRM_MODE_NOTE)
+    return text + (REPLAY_NOTE if settings.replay.enabled else "")
 
 
 class OrderApproval(BaseModel):
@@ -86,10 +95,13 @@ class TradingApp:
     def __init__(self, settings: Settings, broker: Broker | None = None, clock: Callable[[], datetime] = now_jst):
         settings.data_dir.mkdir(parents=True, exist_ok=True)
         self.settings = settings
+        self.replay: ReplayClock | None = None
+        if broker is None:
+            broker, clock, self.replay = make_runtime(settings, clock)
+        self.broker = broker
         self.clock = clock
-        self.broker = broker if broker is not None else make_broker(settings, clock)
         self.audit = AuditLog(settings.data_dir / "audit", clock)
-        self.risk = RiskManager(settings.risk, settings.data_dir, clock)
+        self.risk = RiskManager(settings.risk, settings.data_dir, clock, simulated=self.replay is not None)
         self.pending = PendingOrderStore(settings.confirmation_ttl_seconds, clock)
         self.budget = (
             BudgetLedger(settings.budget, settings.risk.allowed_symbols, settings.data_dir / "budget.json", clock)
@@ -234,6 +246,7 @@ def build_server(app: TradingApp) -> MCPServer:
                 "day_start_equity": stats.day_start_equity,
             },
             "budget": _budget_dict(budget) if budget is not None else {"enabled": False},
+            "replay": {"enabled": True, **app.replay.info()} if app.replay is not None else {"enabled": False},
         }
 
     @mcp.tool(annotations=read_only)
@@ -292,6 +305,10 @@ def build_server(app: TradingApp) -> MCPServer:
             limit_price=limit_price if order_type == "limit" else None,
         )
         violations = app.risk.symbol_violations(req.symbol)  # 対象外の銘柄は株価を取りに行く前に弾く
+        if app.replay is not None and app.replay.remaining_days == 0:
+            violations.append(
+                "リプレイの最終日です。これから出す注文は約定しないので、get_report で成績を確認してください"
+            )
         if violations:
             return rejected_preview(req, reason, violations, [])
         quote, decision, budget = await evaluate(req)
@@ -380,6 +397,109 @@ def build_server(app: TradingApp) -> MCPServer:
                 raise
             app.audit.record("cancel_requested", order_id=order_id, reason=reason, status=order.status.value)
         return {"cancelled": order.status is OrderStatus.CANCELLED, "order": to_dict(order)}
+
+    async def report() -> dict[str, Any]:
+        account, _, budget = await snapshot()
+        kind = app.equity_kind
+        series: list[dict[str, Any]] = []
+        for day in app.audit.days():
+            # その日の評価額: リプレイは大引け時点（equity_close）、それ以外はその日最初に取得した値
+            points = {"equity_close": [], "equity_snapshot": []}
+            for e in app.audit.entries(day):
+                if e.get("event") in points and e.get("kind", "account") == kind:
+                    points[e["event"]].append(float(e["equity"]))
+            values = points["equity_close"][-1:] or points["equity_snapshot"][:1]
+            if values:
+                series.append({"date": day.isoformat(), "equity": values[0]})
+        current = budget.value_jpy if budget is not None else account.equity
+        today = app.clock().astimezone(JST).date().isoformat()
+        if current is not None:
+            series = [p for p in series if p["date"] != today] + [{"date": today, "equity": round(current, 1)}]
+        result: dict[str, Any] = {"basis": "予算の評価額" if kind == "budget" else "模擬口座の評価額"}
+        if series:
+            start, end = series[0]["equity"], series[-1]["equity"]
+            peak, max_dd = start, 0.0
+            for p in series:
+                peak = max(peak, p["equity"])
+                max_dd = min(max_dd, (p["equity"] - peak) / peak * 100 if peak else 0.0)
+            result |= {
+                "period": f"{series[0]['date']} 〜 {series[-1]['date']}",
+                "start_equity": start,
+                "current_equity": end,
+                "return_pct": round((end / start - 1) * 100, 2) if start else None,
+                "max_drawdown_pct": round(max_dd, 2),
+                "equity_series": series[-250:],
+            }
+        all_orders = getattr(app.broker, "all_orders", None)
+        if all_orders is not None:
+            filled = [o for o in await call(all_orders) if o.status is OrderStatus.FILLED]
+            result["filled_orders"] = {
+                "buy": sum(o.side is Side.BUY for o in filled),
+                "sell": sum(o.side is Side.SELL for o in filled),
+            }
+        market = app.broker.market_data
+        if series and hasattr(market, "visible_bars"):
+            # 同じ期間に各銘柄をただ持っていた場合の騰落率（比較用）
+            holds = {}
+            for symbol in app.settings.risk.allowed_symbols:
+                try:
+                    bars = [b for b in market.visible_bars(symbol) if b.date >= series[0]["date"]]
+                except BrokerError:
+                    continue
+                if len(bars) >= 2 and bars[0].close:
+                    holds[symbol] = round((bars[-1].close / bars[0].close - 1) * 100, 2)
+            result["buy_and_hold_pct"] = holds
+        if budget is not None:
+            result["budget"] = _budget_dict(budget)
+        if app.replay is not None:
+            result["replay"] = app.replay.info()
+        return result
+
+    if not app.settings.is_live:
+
+        @mcp.tool(annotations=read_only)
+        async def get_report() -> dict[str, Any]:
+            """模擬売買の成績（評価額の推移・騰落率・最大ドローダウン・約定数、各銘柄を持ち続けた場合との比較）を返す。"""
+            return await report()
+
+    if app.replay is not None:
+        replay = app.replay
+
+        @mcp.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False, open_world_hint=False))
+        async def advance_day() -> dict[str, Any]:
+            """リプレイを次の取引日に進める。出していた注文は、進めた日の日足で約定を判定する。"""
+            async with order_lock:
+                account, _, budget = await snapshot()  # 進める前の日の状態（予算の照合など）を確定させる
+                closing = budget.value_jpy if budget is not None else account.equity
+                if closing is not None:
+                    app.audit.record("equity_close", equity=round(closing, 1), kind=app.equity_kind)
+                before = {o.order_id: o.status for o in await call(app.broker.all_orders)}  # type: ignore[attr-defined]
+                previous = replay.current
+                new_date = replay.advance()
+                if new_date is None:
+                    return {
+                        "finished": True,
+                        "message": "リプレイ期間の最終日です。成績は get_report で確認できます。",
+                        "report": await report(),
+                    }
+                app.audit.record("replay_advance", previous=previous.isoformat(), current=new_date.isoformat())
+                # 日次の損失上限の基準は、実際の取引と同じく前日の大引け時点の評価額にする
+                # （進めた日の値動きを含んだ後の値を基準にすると、その日の下落が損失として数えられない）
+                app.audit.ensure_day_start_equity(closing, kind=app.equity_kind)
+                account, _, budget = await snapshot()
+                updates = [
+                    to_dict(o)
+                    for o in await call(app.broker.all_orders)  # type: ignore[attr-defined]
+                    if before.get(o.order_id) is OrderStatus.OPEN and o.status is not OrderStatus.OPEN
+                ]
+            return {
+                "finished": False,
+                "replay": replay.info(),
+                "order_updates": updates,
+                "cash_available": account.cash_available,
+                "equity": account.equity,
+                "budget": _budget_dict(budget) if budget is not None else {"enabled": False},
+            }
 
     @mcp.tool(annotations=read_only)
     async def get_journal(day: str | None = None) -> dict[str, Any]:

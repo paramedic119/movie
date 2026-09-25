@@ -25,14 +25,22 @@ from pathlib import Path
 from typing import Any
 
 from .config import BudgetSettings
-from .models import ACTIVE_STATUSES, JST, AccountSnapshot, Order, Position, Side, now_jst
+from .models import ACTIVE_STATUSES, JST, AccountSnapshot, Order, OrderStatus, Position, Side, now_jst
 
 # 監査ログのうち「Claude の注文」とみなすイベント（送信時エラーも出た可能性があるので含める）
 CLAUDE_ORDER_EVENTS = frozenset({"order_placed", "order_error"})
+# 約定なしで終わりうる状態（証券会社が約定数量 0 と報告していれば、約定の割り当ては最後の候補にする）
+_ENDED = frozenset({OrderStatus.CANCELLED, OrderStatus.EXPIRED, OrderStatus.REJECTED})
 
 
 def _order_key(entry: dict[str, Any]) -> str:
     return str(entry.get("token") or entry.get("order_id") or entry.get("ts"))
+
+
+def _broker_order(entry: dict[str, Any], orders: list[Order]) -> Order | None:
+    """監査ログの注文に対応する、証券会社の注文一覧の行（模擬は order_id、RSS は注文番号で照合）。"""
+    ids = {str(x) for x in (entry.get("order_id"), entry.get("broker_order_no")) if x}
+    return next((o for o in orders if o.order_id in ids), None)
 
 
 @dataclass
@@ -142,22 +150,39 @@ class BudgetLedger:
     def _claude_orders(self, claude_orders: list[dict[str, Any]], symbol: str, side: Side) -> list[dict[str, Any]]:
         return [e for e in claude_orders if e.get("symbol") == symbol and e.get("side") == side.value]
 
-    def _allocate(self, mine: list[dict[str, Any]], qty: int) -> list[tuple[dict[str, Any], int]]:
-        """Claude の注文のうち、まだ約定として数えていない数量に qty を古い順に割り当てる。
+    def _allocate(self, mine: list[dict[str, Any]], qty: int, orders: list[Order]) -> list[tuple[dict[str, Any], int]]:
+        """Claude の注文のうち、まだ約定として数えていない数量に qty を割り当てる。
 
         同じ注文を 2 回数えたり、あなた自身の売買を Claude の注文の約定と取り違えたりしないため。
+        割り当ての順（それぞれ古い順）:
+        1. 証券会社の注文一覧で約定が確認できる数量
+        2. まだ約定しうる注文（未約定・状態不明・一覧に無い）の残り
+        3. 約定なしで終わったと報告された注文（取消・失効など）。約定数量が読めない場合に予算の数え漏れを防ぐため、
+           候補からは外さない（安全側）
+        取り消した注文の指値を、別の注文の約定価格と取り違えないよう 1 → 3 の順にしている。
         戻り値は (注文, 割り当てた数量) のリスト。
         """
         used = self.state.setdefault("attributed", {})
+        found = [(e, _broker_order(e, orders)) for e in mine]
+        passes = [
+            [(e, o.filled_quantity) for e, o in found if o is not None and o.filled_quantity > 0],
+            [(e, int(e.get("quantity") or 0)) for e, o in found if o is None or o.status not in _ENDED],
+            [(e, int(e.get("quantity") or 0)) for e, o in found if o is not None and o.status in _ENDED],
+        ]
         left = qty
-        out = []
+        taken: dict[str, int] = {}
+        out: list[tuple[dict[str, Any], int]] = []
+        for candidates in passes:
+            for e, cap in candidates:
+                key = _order_key(e)
+                take = min(cap - used.get(key, 0), left)
+                if take > 0:
+                    used[key] = used.get(key, 0) + take
+                    taken[key] = taken.get(key, 0) + take
+                    left -= take
         for e in mine:
-            key = _order_key(e)
-            take = min(int(e.get("quantity") or 0) - used.get(key, 0), left)
-            if take > 0:
-                used[key] = used.get(key, 0) + take
-                left -= take
-                out.append((e, take))
+            if taken.get(_order_key(e)):
+                out.append((e, taken[_order_key(e)]))
         return out
 
     @staticmethod
@@ -169,8 +194,8 @@ class BudgetLedger:
         """
         total = value = 0.0
         for e, q in allocations:
-            ids = {str(x) for x in (e.get("order_id"), e.get("broker_order_no")) if x}
-            fill = next((o.avg_fill_price for o in orders if o.avg_fill_price and o.order_id in ids), None)
+            order = _broker_order(e, orders)
+            fill = order.avg_fill_price if order is not None else None
             price = fill or (float(e["limit_price"]) if e.get("limit_price") else fallback)
             total += q
             value += q * price
@@ -185,7 +210,7 @@ class BudgetLedger:
         claude_orders: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
         st = self.state
-        allocations = self._allocate(self._claude_orders(claude_orders, symbol, Side.BUY), qty)
+        allocations = self._allocate(self._claude_orders(claude_orders, symbol, Side.BUY), qty, orders)
         claude_qty = sum(q for _, q in allocations)
         if qty > claude_qty:
             st["baseline"][symbol] = st["baseline"].get(symbol, 0) + qty - claude_qty  # あなた自身の買い
@@ -209,7 +234,7 @@ class BudgetLedger:
         st = self.state
         h = st["holdings"].get(symbol)
         own = h["quantity"] if h else 0
-        allocations = self._allocate(self._claude_orders(claude_orders, symbol, Side.SELL), min(qty, own))
+        allocations = self._allocate(self._claude_orders(claude_orders, symbol, Side.SELL), min(qty, own), orders)
         claude_qty = sum(q for _, q in allocations)
         user_qty = qty - claude_qty
         # Claude の注文によらない減少は、まずあなたの持ち分から減らす。足りなければ Claude の持ち分が減ったとみなす

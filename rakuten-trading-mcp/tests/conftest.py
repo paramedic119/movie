@@ -2,10 +2,11 @@ from datetime import datetime, timedelta
 
 import pytest
 
+from rakuten_trading_mcp.brokers.bars import write_bars
 from rakuten_trading_mcp.brokers.paper import PaperBroker
 from rakuten_trading_mcp.brokers.static import StaticMarketData
 from rakuten_trading_mcp.config import RiskSettings, Settings
-from rakuten_trading_mcp.models import JST
+from rakuten_trading_mcp.models import JST, Bar
 from rakuten_trading_mcp.server import TradingApp
 
 
@@ -18,6 +19,14 @@ class FakeClock:
 
     def advance(self, seconds: float) -> None:
         self.now += timedelta(seconds=seconds)
+
+
+def write_csv(directory, symbol, rows):
+    """(日付, 始値, 高値, 安値, 終値) の行から <銘柄>.csv を作る。"""
+    write_bars(
+        directory / f"{symbol}.csv",
+        [Bar(date=d, time=None, open=o, high=h, low=lo, close=c, volume=1_000_000) for d, o, h, lo, c in rows],
+    )
 
 
 @pytest.fixture

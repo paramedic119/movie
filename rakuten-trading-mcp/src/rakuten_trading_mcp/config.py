@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 import tomllib
 from dataclasses import dataclass, field, fields
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -99,9 +100,21 @@ class RiskSettings:
 @dataclass
 class PaperSettings:
     initial_cash_jpy: float = 1_000_000
-    market_data: str = "static"  # "static"（JSON ファイル）| "rss"（本物の株価で模擬売買）
+    # "static" = JSON のサンプル株価 / "rss" = マーケットスピード II RSS の株価（Windows）
+    # "csv" = 日足 CSV（J-Quants から fetch コマンドで取得。Linux でも使える）
+    market_data: str = "static"
     static_quotes_file: str = "quotes.json"
+    bars_dir: str = "prices"  # market_data = "csv" のときの日足 CSV の置き場所（<銘柄コード>.csv）
     commission_jpy: float = 0.0
+
+
+@dataclass
+class ReplaySettings:
+    """過去の日足で 1 日ずつ早送りする模擬売買（market_data = "csv" のときだけ使える）。"""
+
+    enabled: bool = False
+    start_date: str = ""  # "YYYY-MM-DD"
+    end_date: str = ""
 
 
 @dataclass
@@ -141,6 +154,7 @@ class Settings:
     risk: RiskSettings = field(default_factory=RiskSettings)
     budget: BudgetSettings = field(default_factory=BudgetSettings)
     paper: PaperSettings = field(default_factory=PaperSettings)
+    replay: ReplaySettings = field(default_factory=ReplaySettings)
     rss: RssSettings = field(default_factory=RssSettings)
     config_path: Path | None = None
 
@@ -182,6 +196,7 @@ def load_settings(path: str | Path | None = None, *, environ: dict[str, str] | N
     risk_raw = dict(raw.pop("risk", {}))
     budget_raw = dict(raw.pop("budget", {}))
     paper_raw = dict(raw.pop("paper", {}))
+    replay_raw = dict(raw.pop("replay", {}))
     rss_raw = dict(raw.pop("rss", {}))
 
     rss_defaults = RssSettings()
@@ -193,13 +208,15 @@ def load_settings(path: str | Path | None = None, *, environ: dict[str, str] | N
     settings.risk = _build(RiskSettings, risk_raw, "risk")
     settings.budget = _build(BudgetSettings, budget_raw, "budget")
     settings.paper = _build(PaperSettings, paper_raw, "paper")
+    settings.replay = _build(ReplaySettings, replay_raw, "replay")
     settings.rss = _build(RssSettings, rss_raw, "rss")
     settings.config_path = config_path
 
     data_dir = Path(settings.data_dir).expanduser()
     settings.data_dir = data_dir if data_dir.is_absolute() else (base_dir / data_dir).resolve()
-    quotes = Path(settings.paper.static_quotes_file).expanduser()
-    settings.paper.static_quotes_file = str(quotes if quotes.is_absolute() else (base_dir / quotes).resolve())
+    for name in ("static_quotes_file", "bars_dir"):
+        value = Path(getattr(settings.paper, name)).expanduser()
+        setattr(settings.paper, name, str(value if value.is_absolute() else (base_dir / value).resolve()))
 
     _validate(settings, env)
     return settings
@@ -215,8 +232,23 @@ def _validate(s: Settings, env: dict[str, str]) -> None:
             f"mode = 'live'（実際の発注）には環境変数 {LIVE_ENV_VAR}=yes も必要です。"
             "誤って実弾モードで起動しないための二重確認です。"
         )
-    if s.paper.market_data not in ("static", "rss"):
-        raise ConfigError("paper.market_data は 'static' か 'rss' にしてください")
+    if s.paper.market_data not in ("static", "rss", "csv"):
+        raise ConfigError("paper.market_data は 'static'・'rss'・'csv' のいずれかにしてください")
+    if s.replay.enabled:
+        if s.is_live or s.paper.market_data != "csv":
+            raise ConfigError(
+                "リプレイ（[replay]）は模擬売買（mode = 'paper'）で paper.market_data = 'csv' のときだけ使えます"
+            )
+        try:
+            start, end = date.fromisoformat(s.replay.start_date), date.fromisoformat(s.replay.end_date)
+        except ValueError as e:
+            raise ConfigError("replay.start_date / end_date は YYYY-MM-DD 形式で指定してください") from e
+        if start > end:
+            raise ConfigError("replay.start_date は end_date 以前の日付にしてください")
+        if not s.risk.allowed_symbols:
+            raise ConfigError(
+                "リプレイでは risk.allowed_symbols で売買する銘柄を指定してください（その日足を使います）"
+            )
     if s.rss.blank_argument not in ("missing", "empty"):
         raise ConfigError("rss.blank_argument は 'missing' か 'empty' にしてください")
     r = s.risk

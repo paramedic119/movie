@@ -57,9 +57,20 @@ reinvest_profits = false   # true にすると、確定した利益の分だけ�
 initial_cash_jpy = 1000000
 # "static" = quotes.sample.json の値で模擬（どの OS でも動く。init コマンドがサンプルを置く）
 # "rss"    = マーケットスピード II RSS の本物の株価で模擬売買（Windows のみ。本番前の確認に最適）
+# "csv"    = 日足 CSV で模擬売買（Linux / macOS でも動く）。`fetch` コマンドで J-Quants API から取得する。
+#            注文は日足で約定を判定する（大引け後・休日の注文は翌営業日の足）。最新の足が 10 日より古いと発注できない
 market_data = "static"
 static_quotes_file = "quotes.sample.json"
+bars_dir = "prices"          # "csv" のときの日足の置き場所（<銘柄コード>.csv。見出しは Date,Open,High,Low,Close,Volume）
 commission_jpy = 0
+
+# 過去の日足で 1 日ずつ早送りする模擬売買（market_data = "csv" のときだけ）。
+# 「今」はリプレイ中の日の大引け後で、advance_day ツールで次の取引日へ進む。成績は get_report。
+# どこまで進んだかは data_dir/replay.json に残る。期間を変えて始め直すときは data_dir を空にする。
+[replay]
+enabled = false
+start_date = "2026-04-01"
+end_date = "2026-06-30"
 
 [rss]
 # RSS が接続されている Excel で開いておくブック（空のブックを保存して作る）

@@ -30,16 +30,24 @@ class RiskDecision:
 
 
 class RiskManager:
-    def __init__(self, settings: RiskSettings, data_dir: Path, clock: Callable[[], datetime] = now_jst):
+    def __init__(
+        self,
+        settings: RiskSettings,
+        data_dir: Path,
+        clock: Callable[[], datetime] = now_jst,
+        simulated: bool = False,
+    ):
         self.s = settings
         self.kill_switch_path = data_dir / settings.kill_switch_file
         self._clock = clock
+        # リプレイでは時計が大引け後で止まっているので、取引時間と発注間隔のチェックは行わない
+        self.simulated = simulated
 
     def kill_switch_active(self) -> bool:
         return self.kill_switch_path.exists()
 
     def market_open(self) -> bool:
-        return is_market_open(self._clock(), self.s.market_holidays)
+        return self.simulated or is_market_open(self._clock(), self.s.market_holidays)
 
     def symbol_violations(self, symbol: str) -> list[str]:
         """銘柄の許可/禁止リストだけの判定（株価を取りに行く前に弾くため）。"""
@@ -151,7 +159,7 @@ class RiskManager:
 
         if stats.orders_placed >= s.max_daily_orders:
             v.append(f"本日の発注回数が上限（{s.max_daily_orders}回）に達しました")
-        if stats.last_order_at is not None:
+        if stats.last_order_at is not None and not self.simulated:
             elapsed = (self._clock() - stats.last_order_at).total_seconds()
             if elapsed < s.min_seconds_between_orders:
                 v.append(

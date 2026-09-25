@@ -66,6 +66,16 @@ class AuditLog:
                         continue  # 途中で切れた行は無視
         return out
 
+    def days(self) -> list[date]:
+        """記録のある日付（古い順）。"""
+        out = []
+        for path in self.directory.glob("*.jsonl"):
+            try:
+                out.append(date.fromisoformat(path.stem))
+            except ValueError:
+                continue
+        return sorted(out)
+
     def events_since(self, start: str, events: frozenset[str], max_days: int = 14) -> list[dict[str, Any]]:
         """start（YYYY-MM-DD）から今日までの、指定したイベントを古い順に返す（最大 max_days 日分）。"""
         today = self._today()

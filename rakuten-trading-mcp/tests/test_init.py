@@ -71,6 +71,11 @@ def test_refuses_to_overwrite_config(tmp_path):
         ({"budget": 0}, "--budget"),
         ({"budget": 100_000, "max_loss": -1}, "--max-loss"),
         ({"symbols": ("toyota",)}, "銘柄コード"),
+        ({"market_data": "yahoo"}, "--market-data"),
+        ({"replay": "2026-04-01"}, "開始日:終了日"),
+        ({"replay": "2026-06-30:2026-04-01"}, "終了日以前"),
+        ({"replay": "2026-04-01:2026-06-30", "market_data": "static"}, "csv"),
+        ({"replay": "2026-04-01:2026-06-30", "live": True, "symbols": ("7203",)}, "--live"),
     ],
 )
 def test_invalid_options(tmp_path, options, fragment):
@@ -115,10 +120,38 @@ def test_default_limits_allow_one_lot_of_a_typical_large_cap(tmp_path, budget, m
 
 @pytest.mark.parametrize(
     ("options", "enforced"),
-    [({}, False), ({"market_data": "rss"}, True), ({"live": True, "symbols": ("9432",)}, True)],
+    [
+        ({}, False),
+        ({"market_data": "csv"}, False),
+        ({"market_data": "rss"}, True),
+        ({"live": True, "symbols": ("9432",)}, True),
+    ],
 )
-def test_market_hours_are_only_relaxed_for_sample_prices(tmp_path, options, enforced):
-    """サンプル株価の模擬売買は週末や夜でも試せる。本物の株価や live では取引時間を守る。"""
+def test_market_hours_are_only_relaxed_for_sample_and_daily_prices(tmp_path, options, enforced):
+    """サンプル株価はいつでも、日足は大引け後に判断して発注できる。RSS の株価や live では取引時間を守る。"""
     run_init(InitOptions(directory=tmp_path, **options))
     env = {"RAKUTEN_MCP_LIVE": "yes"} if options.get("live") else {}
     assert load_settings(tmp_path / "config.toml", environ=env).risk.enforce_market_hours is enforced
+
+
+def test_replay_setup(tmp_path, capsys):
+    args = ["init", "--dir", str(tmp_path), "--delegate", "--budget", "500000", "--symbols", "7203,6758"]
+    assert main([*args, "--replay", "2026-04-01:2026-06-30"]) == 0
+    out = capsys.readouterr().out
+    assert "JQUANTS_API_KEY" in out and "fetch" in out and "data-replay フォルダに STOP" in out
+
+    settings = load_settings(tmp_path / "config.toml", environ={})
+    assert settings.paper.market_data == "csv" and settings.paper.bars_dir == str((tmp_path / "prices").resolve())
+    assert settings.replay.enabled
+    assert (settings.replay.start_date, settings.replay.end_date) == ("2026-04-01", "2026-06-30")
+    assert settings.data_dir == (tmp_path / "data-replay").resolve()  # 通常の模擬売買の記録と混ぜない
+    assert not (tmp_path / "quotes.sample.json").exists()
+    allow = read_json(tmp_path / ".claude" / "settings.local.json")["permissions"]["allow"]
+    assert {tool_rule("advance_day"), tool_rule("get_report"), tool_rule("place_order")} <= set(allow)
+
+
+def test_daily_bars_setup(tmp_path):
+    run_init(InitOptions(directory=tmp_path, market_data="csv"))
+    settings = load_settings(tmp_path / "config.toml", environ={})
+    assert settings.paper.market_data == "csv" and not settings.replay.enabled
+    assert settings.data_dir == (tmp_path / "data").resolve()

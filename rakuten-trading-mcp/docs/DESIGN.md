@@ -61,6 +61,8 @@ Claude はツールを呼ぶだけで、**発注の可否を最終的に決め�
 | `place_order` | 確認トークンの注文を発注（`RssStockOrder_v`）。承認方式 `elicit` ではユーザーに確認ダイアログ | **発注** |
 | `cancel_order` | 未約定注文の取消（`RssCancelOrder_v`） | **取消** |
 | `get_journal` | 監査ログ（判断理由つき）で過去の判断を振り返る | – |
+| `get_report` | 模擬売買の成績（評価額の推移・騰落率・最大ドローダウン・約定数・各銘柄を持ち続けた場合との比較）。paper のみ | – |
+| `advance_day` | リプレイ（過去の日足での早送り）を次の取引日に進める。リプレイ中のみ | 模擬の時計 |
 
 発注を `preview_order` → `place_order` の 2 段階に分けているのは、
 
@@ -174,13 +176,35 @@ Windows のタスクスケジューラで、平日の決まった時刻（例: 9
 
 Claude は呼ばれたときにしか動きません。**損切りを Claude の巡回に頼るのは危険**です。損切りは証券会社側の逆指値注文で置いておくのが確実です（本実装では未対応。今後の拡張候補）。
 
+### 6.5 Linux で使う
+
+楽天証券への発注手段（マーケットスピード II RSS）は Windows の Excel アドインなので、**Linux だけで楽天証券に発注することはできません**（Wine などで Excel と RSS を動かすのも現実的ではありません）。Linux では目的に応じて次のように使い分けます。
+
+| やりたいこと | 方法 | 必要なもの |
+|---|---|---|
+| 過去の相場で Claude の売買を試す（リプレイ） | `init --replay 開始日:終了日` → `fetch` → Claude が `advance_day` で 1 日ずつ進めながら売買し、`get_report` で成績を見る | J-Quants API の無料プラン（12 週間遅れ・過去約 2 年分）で足りる |
+| 本物の株価で毎日の模擬売買 | `init --market-data csv` → 毎営業日の夕方に `fetch` と Claude を実行（`examples/linux/daily_session.sh` を cron や systemd タイマーで） | 当日の日足が要るので J-Quants の有料プラン（ライト: 月額 1,650 円、引け後に当日分） |
+| 楽天証券で実際に発注 | Windows の PC（または Linux 上の Windows 仮想マシン）で、Excel + RSS と Claude Code を動かす | Windows・Excel・マーケットスピード II RSS |
+| Linux から実際に発注 | OS を問わない API がある証券会社のブローカーを追加する（例: 立花証券 e支店 の API。口座があれば無料で、HTTP なので Linux から使え、デモ環境もある） | 未実装。`brokers/` に追加すれば、リスク管理・予算・監査ログはそのまま使える |
+
+日足での模擬売買（`paper.market_data = "csv"`、`DailyBarPaperBroker`）の約定モデル:
+
+- 大引け（15:30）後・休日に出した注文は翌営業日の足、大引け前に出した注文はその日の足で判定します。その足が確定して取得されるまでは未約定です。
+- 寄り付き前（前日の大引け後を含む）に出した指値は、始値が有利なら始値で、日中に指値に届けば指値で約定します。取引時間中に出した注文は、すでに過ぎた始値では約定させず指値で約定させます（控えめな見積もり）。届かなければ失効（本日中の注文）。
+- 当日の足は大引け後まで見せず、リプレイでは「今日」より後の足を一切見せません（先読みの防止）。
+- J-Quants の調整済み四本値（株式分割・併合を調整した値）を使うので、期間中に分割があっても株価が不連続になりません。
+- 日々の模擬売買では、最新の足が 10 日より古いと株価を返さず、古い株価での発注を防ぎます。
+
+リプレイでは時計が「その日の大引け後」で止まっているので、取引時間と発注間隔のチェックは行いません（それ以外のリスク制限と予算はそのまま効きます）。リプレイの記録は通常の模擬売買と混ざらないよう別のフォルダ（`data-replay`）に置き、期間の違う記録が残っていると起動しません。
+
 ## 7. 段階的な導入
 
 1. **paper + static**（どの OS でも）: サンプル株価で、ツールの動き・確認ダイアログ・リスク拒否を確認する。
-2. **paper + RSS の株価**（Windows）: `paper.market_data = "rss"` にして、本物の株価で模擬売買する。`check` コマンドで株価と一覧シートの読み取りを確認し、列名の違いは設定で直す。
-3. **live・極小**: 上限をごく小さくし（例: 低位株 100 株だけ）、約定しにくい指値で発注 → 取消 を試して、発注ID・注文番号・取消が正しく動くことを確かめる。
-4. **live・小額運用**: 対話型（確認あり）で少額から。監査ログで Claude の判断を振り返りながら、ルールと上限を調整する。
-5. **おまかせ**: 予算を小さく決めて `init --live --delegate --budget ...`。必要なら `/loop` や無人運用へ。
+2. **paper + 日足のリプレイ**（どの OS でも）: 過去の期間を早送りして、Claude の売買ルールの成績を `get_report` で確かめる（6.5）。
+3. **paper + RSS の株価**（Windows）: `paper.market_data = "rss"` にして、本物の株価で模擬売買する。`check` コマンドで株価と一覧シートの読み取りを確認し、列名の違いは設定で直す。
+4. **live・極小**: 上限をごく小さくし（例: 低位株 100 株だけ）、約定しにくい指値で発注 → 取消 を試して、発注ID・注文番号・取消が正しく動くことを確かめる。
+5. **live・小額運用**: 対話型（確認あり）で少額から。監査ログで Claude の判断を振り返りながら、ルールと上限を調整する。
+6. **おまかせ**: 予算を小さく決めて `init --live --delegate --budget ...`。必要なら `/loop` や無人運用へ。
 
 ## 8. 法令・規約・リスク
 
@@ -195,8 +219,8 @@ Claude は呼ばれたときにしか動きません。**損切りを Claude の
 - 信用取引（`RssMarginOpenOrder_v` / `RssMarginCloseOrder_v`）
 - 呼値（ティックサイズ）のチェック
 - 約定や損益のスマホ通知
-- 売買ルールのバックテスト（過去データで Claude のルールを検証してから本番へ）
-- 他社 API（kabuステーション API 等）のブローカー実装
+- 他社 API のブローカー実装（Linux から発注できる立花証券 e支店 API、kabuステーション API 等）
+- 分足での模擬売買・リプレイ（J-Quants の分足データなど）
 
 ## 参考
 
@@ -208,5 +232,9 @@ Claude は呼ばれたときにしか動きません。**損切りを Claude の
 - マーケットスピード II RSS の利用に関する確認書兼同意書: https://www.rakuten-sec.co.jp/web/support/cs/pdf/ms2_rss_01.pdf
 - マネックス証券「MONEX MCP Server」提供開始（2026年8月19日）: https://info.monex.co.jp/news/2026/20260819_04.html
 - 三菱UFJ eスマート証券 kabuステーション API: https://kabucom.github.io/kabusapi/ptal/
+- J-Quants API（日本取引所グループの個人向けデータ API）: https://jpx-jquants.com/
+- J-Quants API リファレンス「株価四本値」: https://jpx-jquants.com/ja/spec/eq-bars-daily
+- J-Quants API 契約ごとに利用可能な API とデータ格納期間: https://jpx-jquants.com/ja/spec/data-spec
+- 立花証券 e支店 API: https://www.e-shiten.jp/api/
 - Claude Code ヘッドレス実行: https://code.claude.com/docs/en/headless
 - Claude Code と MCP: https://code.claude.com/docs/en/mcp

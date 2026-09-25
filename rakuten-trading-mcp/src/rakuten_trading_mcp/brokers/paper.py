@@ -13,14 +13,16 @@ import os
 import threading
 from collections.abc import Callable
 from dataclasses import asdict
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from ..market_hours import CLOSE_TIME, OPEN_TIME
 from ..models import (
     ACTIVE_STATUSES,
     JST,
     AccountSnapshot,
+    Bar,
     Order,
     OrderRequest,
     OrderStatus,
@@ -30,6 +32,7 @@ from ..models import (
     Side,
     now_jst,
 )
+from .bars import DailyBarData
 from .base import Broker, BrokerError, MarketData
 
 
@@ -133,6 +136,10 @@ class PaperBroker(Broker):
         price = self._fill_price(order, quote)
         if price is None:
             return False
+        self._apply_fill(order, price, "約定（模擬）")
+        return True
+
+    def _apply_fill(self, order: Order, price: float, message: str) -> None:
         qty = order.quantity
         positions = self._state["positions"]
         pos = positions.get(order.symbol, {"quantity": 0, "avg_price": 0.0})
@@ -153,8 +160,17 @@ class PaperBroker(Broker):
         order.status = OrderStatus.FILLED
         order.filled_quantity = qty
         order.avg_fill_price = price
-        order.message = "約定（模擬）"
-        return True
+        order.message = message
+
+    def _on_placed(self, order: Order, quote: Quote) -> None:
+        """発注直後の処理。気配値で判定できるものはその場で約定させる。"""
+        self._try_fill(order, quote)
+
+    def all_orders(self) -> list[Order]:
+        """模擬口座のすべての注文（成績の集計用）。"""
+        with self._lock:
+            self._refresh()
+            return self._orders()
 
     def _reserved_cash(self) -> float:
         return sum(
@@ -221,7 +237,7 @@ class PaperBroker(Broker):
             if reject:
                 order.status, order.message = OrderStatus.REJECTED, reject
             else:
-                self._try_fill(order, quote)
+                self._on_placed(order, quote)
             self._store(order)
             self._save()
             return order
@@ -259,3 +275,71 @@ class PaperBroker(Broker):
             self._store(order)
             self._save()
             return order
+
+
+class DailyBarPaperBroker(PaperBroker):
+    """日足（四本値）で約定を判定する模擬売買。リアルタイムの株価が無い環境（Linux など）向け。
+
+    どの日の足で判定するか:
+    - 大引け後・休日に出した注文は翌営業日の足、平日の大引け前に出した注文はその日の足。
+    - その足が確定する（大引け後にデータが入る）まで、注文は未約定のまま待つ。
+    約定価格（簡易モデル）:
+    - 寄り付き前に出した注文（前日の大引け後・休日を含む）: 買いの指値は、始値が指値以下なら始値、安値が指値以下なら指値。
+      売りの指値は、始値が指値以上なら始値、高値が指値以上なら指値。成行は始値。
+    - 取引時間中に出した注文: 寄り付きの値段では買えないので、指値に届いていれば指値（その日の値幅の中に収める）。
+      成行は終値。どちらも実際より不利になりうる、控えめな見積もり。
+    - 指値に届かなければ失効（本日中の注文）。
+    """
+
+    market_data: DailyBarData
+
+    def _on_placed(self, order: Order, quote: Quote) -> None:
+        order.message = "日足で約定を判定します（大引け前の注文はその日、大引け後・休日の注文は翌営業日の足）"
+
+    @staticmethod
+    def _bar_fill_price(order: Order, bar: Bar, intraday: bool) -> float | None:
+        close = bar.close
+        open_ = bar.open if bar.open is not None else close
+        high = bar.high if bar.high is not None else max(open_, close)
+        low = bar.low if bar.low is not None else min(open_, close)
+        if order.order_type is OrderType.MARKET:
+            return close if intraday else open_
+        limit = order.limit_price or 0.0
+        if order.side is Side.BUY:
+            if low > limit:
+                return None
+            return min(limit, high) if intraday else min(limit, open_)
+        if high < limit:
+            return None
+        return max(limit, low) if intraday else max(limit, open_)
+
+    def _refresh(self) -> None:
+        changed = False
+        for order in self._orders():
+            if order.status is not OrderStatus.OPEN:
+                continue
+            created = datetime.fromisoformat(order.created_at).astimezone(JST)
+            same_day = created.weekday() < 5 and created.time() < CLOSE_TIME
+            try:
+                bar = self.market_data.first_bar_after(order.symbol, created.date(), inclusive=same_day)
+            except BrokerError:
+                continue  # その銘柄の日足が読めなければ、未約定のまま次の機会に判定する
+            if bar is None:
+                continue
+            intraday = same_day and created.time() >= OPEN_TIME and bar.date == created.date().isoformat()
+            price = self._bar_fill_price(order, bar, intraday)
+            if price is None:
+                order.status = OrderStatus.EXPIRED
+                order.message = f"{bar.date} の値動きでは指値に届かず失効（模擬・本日中の注文）"
+            else:
+                self._apply_fill(order, price, f"{bar.date} の日足で約定（模擬）")
+            self._store(order)
+            changed = True
+        if changed:
+            self._save()
+
+    def list_orders(self) -> list[Order]:
+        with self._lock:
+            self._refresh()
+            since = (self._clock().astimezone(JST).date() - timedelta(days=7)).isoformat()
+            return [o for o in self._orders() if o.created_at[:10] >= since or o.status in ACTIVE_STATUSES]

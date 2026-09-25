@@ -13,6 +13,8 @@ from .models import JST
 # 2024年11月5日から大引けは 15:30。
 SESSIONS: tuple[tuple[time, time], ...] = ((time(9, 0), time(11, 30)), (time(12, 30), time(15, 30)))
 SESSION_TEXT = "平日 9:00-11:30 / 12:30-15:30（東証）"
+OPEN_TIME = SESSIONS[0][0]  # 寄り付き
+CLOSE_TIME = SESSIONS[-1][1]  # 大引け（その日の日足が確定する時刻）
 _YEAR_END_HOLIDAYS = {(12, 31), (1, 1), (1, 2), (1, 3)}
 
 

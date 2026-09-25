@@ -14,3 +14,7 @@ examples/logs/
 # pip wheel / build の生成物
 /build/
 /dist/
+# init --replay / --market-data csv と Linux 用スクリプトが作るもの（取引の記録・取得した株価・実行ログ）
+/data-replay/
+/prices/
+/logs/

@@ -128,6 +128,45 @@ def test_each_fill_is_priced_by_its_own_order(ledger, broker, market):
     assert ledger.state["holdings"]["7203"] == {"quantity": 200, "cost": 285_100 + 290_100}
 
 
+def test_fill_is_not_priced_by_an_earlier_cancelled_order(ledger, broker, market):
+    """取り消した売り注文のあとに出し直した売りが約定したら、出し直した注文の約定単価で損益を計算する。"""
+    ledger.reconcile(broker.get_account(), [], [])
+    buy = broker.place_order(limit(Side.BUY, 100, 2860))  # 2,851円で約定
+    events = [claude_order("t1", "buy", 100, 2860, order_id=buy.order_id)]
+    ledger.reconcile(broker.get_account(), broker.list_orders(), events)
+    first = broker.place_order(limit(Side.SELL, 100, 2950))  # 届かずに残る
+    broker.cancel_order(first.order_id)
+    second = broker.place_order(limit(Side.SELL, 100, 2840))  # 買気配 2,849円で約定
+    events += [
+        claude_order("t2", "sell", 100, 2950, order_id=first.order_id),
+        claude_order("t3", "sell", 100, 2840, order_id=second.order_id),
+    ]
+    [fill] = ledger.reconcile(broker.get_account(), broker.list_orders(), events)
+    assert fill["price"] == 2849 and fill["realized_pnl"] == pytest.approx((2849 - 2851) * 100)
+    assert ledger.state["attributed"] == {"t1": 100, "t3": 100}
+
+
+def test_fill_falls_back_to_ended_orders_when_fills_are_unreadable(ledger):
+    """約定数量が読めず、注文が取消扱いに見えても、保有が増えたら Claude の買いとして予算に数える（安全側）。"""
+    from rakuten_trading_mcp.models import Order, OrderStatus
+
+    ledger.reconcile(account(0), [], [])
+    cancelled = Order(
+        order_id="100",
+        symbol="7203",
+        side=Side.BUY,
+        quantity=100,
+        order_type=OrderType.LIMIT,
+        limit_price=2860,
+        status=OrderStatus.CANCELLED,
+        created_at="",
+    )
+    events = [claude_order("t1", "buy", 100, 2860, order_id="100")]
+    [fill] = ledger.reconcile(account(100), [cancelled], events)
+    assert fill["quantity"] == 100 and fill["price"] == 2860
+    assert ledger.state["baseline"]["7203"] == 0
+
+
 def test_unreadable_holdings_do_not_change_the_ledger(ledger):
     ledger.reconcile(account(0), [], [])
     ledger.reconcile(account(100, 2851), [], [claude_order("t1", "buy", 100, 2851)])
