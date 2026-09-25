@@ -111,3 +111,14 @@ def test_default_limits_allow_one_lot_of_a_typical_large_cap(tmp_path, budget, m
     run_init(InitOptions(directory=tmp_path, delegate=budget is not None, budget=budget))
     risk = load_settings(tmp_path / "config.toml", environ={}).risk
     assert risk.max_order_value_jpy == max_order and risk.max_position_value_jpy >= 285_500
+
+
+@pytest.mark.parametrize(
+    ("options", "enforced"),
+    [({}, False), ({"market_data": "rss"}, True), ({"live": True, "symbols": ("9432",)}, True)],
+)
+def test_market_hours_are_only_relaxed_for_sample_prices(tmp_path, options, enforced):
+    """サンプル株価の模擬売買は週末や夜でも試せる。本物の株価や live では取引時間を守る。"""
+    run_init(InitOptions(directory=tmp_path, **options))
+    env = {"RAKUTEN_MCP_LIVE": "yes"} if options.get("live") else {}
+    assert load_settings(tmp_path / "config.toml", environ=env).risk.enforce_market_hours is enforced

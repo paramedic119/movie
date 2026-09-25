@@ -116,7 +116,8 @@ max_price_deviation_pct = 3.0          # 指値と現在値の乖離の上限（
 min_seconds_between_orders = 30
 max_daily_loss_jpy = {limits["max_daily_loss"]}           # 1 日の損失がこれを超えたら新規の買いを止める
 allow_market_orders = false
-enforce_market_hours = true
+# 取引時間外の注文を受け付けない。サンプル株価の模擬売買だけは、いつでも試せるよう false にしている
+enforce_market_hours = {"false" if o.market_data == "static" and not o.live else "true"}
 market_holidays = [
   {holidays},
 ]
