@@ -236,3 +236,187 @@ test('大きな数：数の組み立て・漢字・位・計算', () => {
     }
   }
 });
+
+// ---------- 折れ線グラフと表・垂直と平行・変わり方・何倍（2026年9月に追加した単元） ----------
+
+const ans = (q) => (q.kind === 'input' ? Number(q.fields[0].answer) : q.answer);
+const DAY = ['午前9時', '午前10時', '午前11時', '正午', '午後1時', '午後2時', '午後3時'];
+
+test('折れ線グラフと表：答えをグラフ・表のデータから計算しなおす', () => {
+  let seen = 0;
+  for (const q of generated('sansu-graph', [1, 2, 3], 500)) {
+    const t = plain(q.q);
+    const f = q.figure;
+    let m;
+    if (f.type === 'line') {
+      const { ys, xs } = f;
+      const lo = f.yMin ?? 0;
+      for (const v of ys) {
+        assert.ok(v >= lo && v <= f.yMax, `目もりの中 ${v}`);
+        assert.equal((v - lo) % f.yStep, 0, `点は目もりの線の上 ${v}`);
+      }
+      const year = xs.length === 12;
+      const idx = (name) => (year ? Number(name.replace('月', '')) - 1 : DAY.indexOf(name));
+      const nameRe = year ? '(\\d+月)' : '(午前\\d+時|正午|午後\\d+時)';
+      if ((m = t.match(new RegExp(`${nameRe}の気温は何度`)))) assert.equal(ans(q), ys[idx(m[1])], t);
+      else if ((m = t.match(/いちばん(高い|低い|高かった)のは何/))) {
+        const best = m[1] === '低い' ? Math.min(...ys) : Math.max(...ys);
+        assert.equal(ys.filter((v) => v === best).length, 1, '1つに決まる');
+        assert.equal(idx(q.answer), ys.indexOf(best), t);
+      } else if ((m = t.match(new RegExp(`${nameRe}から${nameRe}までに、気温は何度(上がり|下がり)`)))) {
+        const d = ys[idx(m[2])] - ys[idx(m[1])];
+        assert.equal(ans(q), m[3] === '上がり' ? d : -d, t);
+        assert.ok(ans(q) > 0, t);
+      } else if ((m = t.match(/(上がり|下がり)方がいちばん大きいのは/))) {
+        const sign = m[1] === '上がり' ? 1 : -1;
+        const diffs = ys.slice(1).map((v, i) => (v - ys[i]) * sign);
+        const best = Math.max(...diffs);
+        assert.equal(diffs.filter((d) => d === best).length, 1, '1つに決まる');
+        const [a, b] = q.answer.split('から');
+        assert.equal(idx(a), diffs.indexOf(best), t);
+        assert.equal(idx(b), diffs.indexOf(best) + 1, t);
+        for (const c of q.choices) if (c !== q.answer) assert.notEqual(idx(c.split('から')[0]), idx(a));
+      } else assert.fail(`知らない形の問題: ${t}`);
+    } else {
+      assert.equal(f.type, 'table');
+      const body = f.rows.slice(0, -1).map((r) => r.slice(1, -1).map(Number));
+      const rowSum = body.map((r) => r.reduce((a, b) => a + b, 0));
+      const colSum = body[0].map((_, c) => body.reduce((a, r) => a + r[c], 0));
+      const total = rowSum.reduce((a, b) => a + b, 0);
+      f.rows.slice(0, -1).forEach((r, i) => assert.equal(Number(r.at(-1)), rowSum[i], '場所ごとの合計'));
+      f.rows.at(-1).slice(1, -1).forEach((v, c) => assert.equal(Number(v), colSum[c], '種類ごとの合計'));
+      const place = f.rows.slice(0, -1).map((r) => r[0]);
+      const kinds = f.head.slice(1, -1);
+      if ((m = t.match(/(校庭|体育館|教室|ろうか)で(すりきず|切りきず|つき指)をした人は/))) {
+        assert.equal(ans(q), body[place.indexOf(m[1])][kinds.indexOf(m[2])], t);
+      } else if (t.includes('合計）は何人')) {
+        assert.equal(f.rows.at(-1).at(-1), '？');
+        assert.equal(ans(q), total, t);
+      } else if (t.includes('いちばん多い けがの種類')) {
+        const best = Math.max(...colSum);
+        assert.equal(colSum.filter((v) => v === best).length, 1);
+        assert.equal(q.answer, kinds[colSum.indexOf(best)], t);
+      } else if (t.includes('いちばん多い場所')) {
+        const best = Math.max(...rowSum);
+        assert.equal(rowSum.filter((v) => v === best).length, 1);
+        assert.equal(q.answer, place[rowSum.indexOf(best)], t);
+      } else assert.fail(`知らない形の問題: ${t}`);
+    }
+    seen += 1;
+  }
+  assert.ok(seen > 1000);
+});
+
+/** 2本の半直線（向きを角度で表す）の間の角を、ベクトルから計算する */
+function angleBetween(d1, d2) {
+  const r = (d) => [Math.cos((d * Math.PI) / 180), Math.sin((d * Math.PI) / 180)];
+  const [a, b] = [r(d1), r(d2)];
+  return Math.round((Math.acos(a[0] * b[0] + a[1] * b[1]) * 180) / Math.PI);
+}
+
+test('垂直・平行と四角形：平行四辺形・ひし形・平行線と角', async () => {
+  const { figureSvg } = await import('../public/js/ui/figure.js');
+  for (const q of generated('sansu-heikou')) {
+    const t = plain(q.q);
+    const f = q.figure;
+    let m;
+    if (q.id.includes('-b-')) continue; // 用語の問題（選択肢の形は全単元のテストで確認）
+    if ((m = t.match(/辺(AD|CD)の長さは/))) assert.equal(ans(q), m[1] === 'AD' ? f.b : f.a, t);
+    else if (t.includes('角Dの大きさ')) assert.equal(ans(q), f.angle, t);
+    else if (t.includes('角Aの大きさ')) assert.equal(ans(q), 180 - f.angle, t);
+    else if (t.includes('平行四辺形ABCDの まわり')) assert.equal(ans(q), 2 * (f.a + f.b), t);
+    else if ((m = t.match(/^1辺が (\d+)cm のひし形/))) {
+      assert.equal(ans(q), 4 * Number(m[1]), t);
+      assert.equal(f.a, f.b, 'ひし形の図は4辺が同じ');
+    } else if ((m = t.match(/まわりの長さが (\d+)cm の平行四辺形ABCDがあります。辺ABが (\d+)cm/))) {
+      assert.equal(ans(q), Number(m[1]) / 2 - Number(m[2]), t);
+    } else if (t.includes('直線アとイは平行です')) {
+      const { theta } = f;
+      // 右=0°、直線の上向き=theta、左=180°、直線の下向き=180+theta
+      const rays = { ur: [0, theta], ul: [theta, 180], ll: [180, 180 + theta], lr: [180 + theta, 360] };
+      const g = angleBetween(...rays[f.given]);
+      assert.equal(ans(q), angleBetween(...rays[f.ask]), t);
+      assert.ok(figureSvg(f).includes(`>${g}°<`), '図に書いてある角');
+      if (q.level === 2) assert.equal(f.given, f.ask);
+      else assert.notEqual(f.given, f.ask);
+    } else assert.fail(`知らない形の問題: ${t}`);
+    if (f) assert.ok(figureSvg(f).startsWith('<svg'), '図が描ける');
+  }
+});
+
+/** 1辺1の正方形の集まりのまわりの長さ（外がわの辺を数える） */
+function perimeterOf(cells) {
+  const has = new Set(cells.map(([x, y]) => `${x},${y}`));
+  let n = 0;
+  for (const [x, y] of cells) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (!has.has(`${x + dx},${y + dy}`)) n += 1;
+  return n;
+}
+
+test('変わり方：表と式が合い、答えが正しい', () => {
+  for (const q of generated('sansu-kawarikata')) {
+    const t = plain(q.q);
+    const f = q.figure;
+    let m;
+    const pairs = f.head.slice(1).map((x, i) => [Number(x), Number(f.rows[0][i + 1])]);
+    if (q.kind === 'choice') {
+      // 式の選択肢：表のどの組にもあてはまるのは、答えの式だけ
+      const holds = (formula) =>
+        pairs.every(([a, b]) => {
+          const [l, r] = formula.replace(/□/g, `(${a})`).replace(/○/g, `(${b})`).split('＝');
+          return evalExpr(l) === evalExpr(r);
+        });
+      assert.ok(holds(q.answer), `${t} ${q.answer}`);
+      for (const c of q.choices) if (c !== q.answer) assert.ok(!holds(c), `${t} ${c} もあてはまる`);
+      continue;
+    }
+    if ((m = t.match(/まわりの長さが (\d+)cm の長方形.*たてが (\d+)cm のとき/))) assert.equal(ans(q), Number(m[1]) / 2 - Number(m[2]), t);
+    else if ((m = t.match(/1辺が (\d+)cm のとき、まわり/))) assert.equal(ans(q), 4 * Number(m[1]), t);
+    else if ((m = t.match(/まわりの長さが (\d+)cm のとき、1辺/))) assert.equal(ans(q) * 4, Number(m[1]), t);
+    else if ((m = t.match(/弟より (\d+)才年上.*弟が (\d+)才のとき/))) assert.equal(ans(q), Number(m[1]) + Number(m[2]), t);
+    else if ((m = t.match(/1本 (\d+)円.*[^\d](\d+)本買うと/))) assert.equal(ans(q), Number(m[1]) * Number(m[2]), t);
+    else if ((m = t.match(/だんの数が (\d+)だん/))) {
+      const n = Number(m[1]);
+      const cells = [];
+      for (let x = 0; x < n; x += 1) for (let y = 0; y <= x; y += 1) cells.push([x, y]);
+      assert.equal(ans(q), perimeterOf(cells), t);
+      for (const [k, v] of pairs) {
+        const c = [];
+        for (let x = 0; x < k; x += 1) for (let y = 0; y <= x; y += 1) c.push([x, y]);
+        assert.equal(v, perimeterOf(c), '表の数');
+      }
+    } else if ((m = t.match(/正方形を (\d+)こつくるとき、ぼうは/))) {
+      // ぼうの数 ＝ となりどうしで同じ辺を1本にしたときの辺の数
+      const sticks = (k) => {
+        const edges = new Set();
+        for (let x = 0; x < k; x += 1) ['h' + x + ',0', 'h' + x + ',1', 'v' + x + ',0', 'v' + (x + 1) + ',0'].forEach((e) => edges.add(e));
+        return edges.size;
+      };
+      assert.equal(ans(q), sticks(Number(m[1])), t);
+      for (const [k, v] of pairs) assert.equal(v, sticks(k), '表の数');
+    } else if ((m = t.match(/水が (\d+)L 入っている水そうに、1分間に (\d+)L ずつ.*[^\d](\d+)分後/))) {
+      assert.equal(ans(q), Number(m[1]) + Number(m[2]) * Number(m[3]), t);
+    } else assert.fail(`知らない形の問題: ${t}`);
+  }
+});
+
+test('何倍でくらべる：何倍・もとの大きさ・差と倍のちがい', () => {
+  for (const q of generated('sansu-bai')) {
+    const t = plain(q.q);
+    let m;
+    if ((m = t.match(/^(\d+)cm は、(\d+)cm の何倍/))) assert.equal(ans(q) * Number(m[2]), Number(m[1]), t);
+    else if ((m = t.match(/^(\d+)cm の (\d+)倍は/))) assert.equal(ans(q), Number(m[1]) * Number(m[2]), t);
+    else if ((m = t.match(/長さの (\d+)倍は (\d+)cm です。もとの/))) assert.equal(ans(q) * Number(m[1]), Number(m[2]), t);
+    else if ((m = t.match(/赤いゴムは (\d+)cm が (\d+)cm に、青いゴムは (\d+)cm が (\d+)cm に/))) {
+      const [a1, b1, a2, b2] = m.slice(1, 5).map(Number);
+      if (t.includes('ちがい')) {
+        assert.equal(b1 - a1, b2 - a2, '差は同じ');
+        assert.equal(q.answer, 'どちらも同じ', t);
+      } else {
+        assert.notEqual(b1 * a2, b2 * a1, '何倍かはちがう');
+        assert.equal(q.answer, b1 * a2 > b2 * a1 ? '赤いゴム' : '青いゴム', t);
+      }
+    } else if ((m = t.match(/青いリボンの (\d+)倍、青いリボンの長さは 黄色いリボンの (\d+)倍/))) {
+      assert.equal(ans(q), Number(m[1]) * Number(m[2]), t);
+    } else assert.fail(`知らない形の問題: ${t}`);
+  }
+});

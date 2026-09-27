@@ -21,8 +21,8 @@ const slug = (...parts) =>
     .replace(/[^a-z0-9-]/gi, 'x')
     .toLowerCase();
 
-function choiceQ(unit, key, level, { q, big, choices, answer, explain, hint }) {
-  return { id: `${unit}-g-${slug(key)}`, level, kind: 'choice', q, big, choices, answer, explain, hint, generated: true };
+function choiceQ(unit, key, level, { q, big, choices, answer, explain, hint, figure }) {
+  return { id: `${unit}-g-${slug(key)}`, level, kind: 'choice', q, big, choices, answer, explain, hint, figure, generated: true };
 }
 
 /** fields: [{ label, answer, suffix, prefix, group4, decimal }] */
@@ -1164,12 +1164,655 @@ function genMenseki(level, rng) {
   });
 }
 
+// ---------- 折れ線グラフと表 ----------
+
+/** 数の並びから短い目じるしを作る（問題IDが、ちがうグラフで同じにならないように） */
+function numsKey(nums) {
+  let h = 7;
+  for (const n of nums) h = (h * 31 + n + 11) % 1000003;
+  return h.toString(36);
+}
+
+/** ある町の1年間の気温（1月〜12月・2度きざみ）。いちばん低い月と高い月は1つずつ */
+export function yearTemps(rng) {
+  for (let tries = 0; tries < 200; tries += 1) {
+    const i0 = rng.pick([0, 1]); // いちばん寒い月（1月か2月）
+    const top = rng.pick([6, 7]); // いちばん暑い月（7月か8月）
+    const low = rng.int(1, 4) * 2;
+    const high = rng.int(13, 15) * 2;
+    const up = top - i0;
+    const down = 12 - up;
+    const ys = Array.from({ length: 12 }, (_, i) => {
+      const j = (i - i0 + 12) % 12;
+      const k = j <= up ? (1 - Math.cos((Math.PI * j) / up)) / 2 : (1 + Math.cos((Math.PI * (j - up)) / down)) / 2;
+      const v = low + (high - low) * k + (j === 0 || j === up ? 0 : rng.pick([-1, 0, 1]));
+      return Math.max(0, Math.min(30, Math.round(v / 2) * 2));
+    });
+    const max = Math.max(...ys);
+    const min = Math.min(...ys);
+    if (ys.filter((v) => v === max).length === 1 && ys.filter((v) => v === min).length === 1) return ys;
+  }
+  return [4, 6, 10, 14, 18, 22, 26, 28, 24, 18, 12, 8];
+}
+
+const yearFig = (ys) => ({
+  type: 'line',
+  name: 'ある町の1年間の気温',
+  xs: ys.map((_, i) => String(i + 1)),
+  ys,
+  yMax: 30,
+  yStep: 2,
+  yLabelEvery: 10,
+  xUnit: '（月）',
+  yUnit: '（度）',
+});
+
+export const DAY_TIMES = ['午前9時', '午前10時', '午前11時', '正午', '午後1時', '午後2時', '午後3時'];
+
+/** 晴れた日の気温（午前9時〜午後3時・1度きざみ）。午後1時か2時がいちばん高い */
+export function dayTemps(rng) {
+  for (;;) {
+    const top = rng.pick([4, 5]);
+    const ys = [rng.int(12, 17)];
+    for (let i = 1; i < DAY_TIMES.length; i += 1) ys.push(ys[i - 1] + (i <= top ? rng.int(1, 3) : -rng.int(1, 2)));
+    if (Math.max(...ys) <= 30) return ys;
+  }
+}
+
+const dayFig = (ys) => ({
+  type: 'line',
+  name: '晴れた日の気温',
+  xs: ['9', '10', '11', '12', '1', '2', '3'],
+  ys,
+  yMin: 10,
+  yMax: 30,
+  yStep: 1,
+  yLabelEvery: 5,
+  xUnit: '（時）',
+  yUnit: '（度）',
+});
+
+export const PLACES = ['校庭', '体育館', '教室', 'ろうか'];
+export const INJURIES = ['すりきず', '切りきず', 'つき指'];
+
+/** けがの記録（場所 × けがの種類）。種類ごとの合計・場所ごとの合計が いちばん多いものは1つずつ */
+export function injuryTable(rng) {
+  for (;;) {
+    const m = PLACES.map((_, r) => INJURIES.map((_, c) => rng.int(r === 0 && c === 0 ? 4 : 0, r === 0 && c === 0 ? 12 : 7)));
+    const col = INJURIES.map((_, c) => m.reduce((a, row) => a + row[c], 0));
+    const row = m.map((r) => r.reduce((a, b) => a + b, 0));
+    const one = (xs) => xs.filter((v) => v === Math.max(...xs)).length === 1;
+    if (one(col) && one(row)) return m;
+  }
+}
+
+function injuryFig(m, hideTotal = false) {
+  const row = m.map((r) => r.reduce((a, b) => a + b, 0));
+  const col = INJURIES.map((_, c) => m.reduce((a, r) => a + r[c], 0));
+  const total = row.reduce((a, b) => a + b, 0);
+  return {
+    type: 'table',
+    caption: 'けがをした人の数（人）',
+    head: ['場所', ...INJURIES, '合計'],
+    rows: [...m.map((r, i) => [PLACES[i], ...r.map(String), String(row[i])]), ['合計', ...col.map(String), hideTotal ? '？' : String(total)]],
+  };
+}
+
+/** となり合う2つの点の間（i → i+1）で、いちばん大きく変わったところ。1つに決まらなければ -1 */
+function steepest(ys, sign) {
+  const d = ys.slice(1).map((v, i) => (v - ys[i]) * sign);
+  const best = Math.max(...d);
+  return best > 0 && d.filter((v) => v === best).length === 1 ? d.indexOf(best) : -1;
+}
+
+function genGraph(level, rng) {
+  const U = 'sansu-graph';
+  const t = rng.int(0, 2);
+  // 1年間の気温
+  if (t === 0 || (level === 1 && t === 2)) {
+    const ys = yearTemps(rng);
+    const k = numsKey(ys);
+    const fig = yearFig(ys);
+    const lead = 'ある町の1年間の気温を、折れ線グラフに表しました。';
+    const top = ys.indexOf(Math.max(...ys));
+    const bottom = ys.indexOf(Math.min(...ys));
+    if (level === 1) {
+      if (rng.chance(0.6)) {
+        const m = rng.int(0, 11);
+        return inputQ(U, `year-read-${k}-${m}`, 1, {
+          q: `${lead}${m + 1}月の気温は何度ですか。`,
+          fields: [{ label: '', answer: String(ys[m]), suffix: '度' }],
+          explain: `たてのじくの1目もりは2度です。${m + 1}月の点は ${ys[m]}度 のところにあります。`,
+          hint: '1目もりが何度かを、はじめにたしかめよう。',
+          figure: fig,
+        });
+      }
+      const high = rng.chance(0.5);
+      const ans = high ? top : bottom;
+      const near = [ans - 1, ans + 1, ans - 2, ans + 2, high ? bottom : top].filter((i) => i >= 0 && i < 12);
+      return choiceQ(U, `year-${high ? 'max' : 'min'}-${k}`, 1, {
+        q: `${lead}気温がいちばん${high ? '高い' : '低い'}のは何月ですか。`,
+        choices: withDistractors(rng, `${ans + 1}月`, near.map((i) => `${i + 1}月`)),
+        answer: `${ans + 1}月`,
+        explain: `点がいちばん${high ? '上' : '下'}にあるのは ${ans + 1}月で、${ys[ans]}度です。`,
+        figure: fig,
+      });
+    }
+    if (level === 2) {
+      const i = steepest(ys, 1);
+      if (i >= 0 && rng.chance(0.5)) {
+        const label = (j) => `${j + 1}月から${j + 2}月`;
+        const others = ys.slice(1).map((_, j) => j).filter((j) => j !== i);
+        return choiceQ(U, `year-steepup-${k}`, 2, {
+          q: `${lead}気温の上がり方がいちばん大きいのは、何月から何月の間ですか。`,
+          choices: withDistractors(rng, label(i), rng.shuffle(others).map(label)),
+          answer: label(i),
+          explain: `線のかたむきが いちばん急なところが、上がり方がいちばん大きいところです。${i + 1}月の ${ys[i]}度 から ${i + 2}月の ${ys[i + 1]}度 へ、${ys[i + 1] - ys[i]}度 上がっています。`,
+          hint: '線のかたむきが いちばん急なところをさがそう。',
+          figure: fig,
+        });
+      }
+      // いちばん寒い月から いちばん暑い月までの間の2つの月（あとの月のほうが高い組だけ）
+      const pairs = [];
+      for (let a = bottom; a < top; a += 1) for (let b = a + 1; b <= top; b += 1) if (ys[b] > ys[a]) pairs.push([a, b]);
+      const [a, b] = rng.pick(pairs);
+      return inputQ(U, `year-diff-${k}-${a}-${b}`, 2, {
+        q: `${lead}${a + 1}月から${b + 1}月までに、気温は何度上がりましたか。`,
+        fields: [{ label: '', answer: String(ys[b] - ys[a]), suffix: '度' }],
+        explain: `${a + 1}月は ${ys[a]}度、${b + 1}月は ${ys[b]}度 なので、${ys[b]} − ${ys[a]} ＝ ${ys[b] - ys[a]}（度）上がりました。`,
+        figure: fig,
+      });
+    }
+    const i = steepest(ys, -1);
+    if (i >= 0 && rng.chance(0.6)) {
+      const label = (j) => `${j + 1}月から${j + 2}月`;
+      const others = ys.slice(1).map((_, j) => j).filter((j) => j !== i);
+      return choiceQ(U, `year-steepdown-${k}`, 3, {
+        q: `${lead}気温の下がり方がいちばん大きいのは、何月から何月の間ですか。`,
+        choices: withDistractors(rng, label(i), rng.shuffle(others).map(label)),
+        answer: label(i),
+        explain: `右下がりの線で、かたむきが いちばん急なところです。${i + 1}月の ${ys[i]}度 から ${i + 2}月の ${ys[i + 1]}度 へ、${ys[i] - ys[i + 1]}度 下がっています。`,
+        hint: '右下がりの線で、いちばん急なところをさがそう。',
+        figure: fig,
+      });
+    }
+    // いちばん暑い月から12月までの間の2つの月（あとの月のほうが低い組だけ）
+    const pairs = [];
+    for (let a = top; a < 11; a += 1) for (let b = a + 1; b <= 11; b += 1) if (ys[b] < ys[a]) pairs.push([a, b]);
+    const [a, b] = rng.pick(pairs);
+    return inputQ(U, `year-down-${k}-${a}-${b}`, 3, {
+      q: `${lead}${a + 1}月から${b + 1}月までに、気温は何度下がりましたか。`,
+      fields: [{ label: '', answer: String(ys[a] - ys[b]), suffix: '度' }],
+      explain: `${a + 1}月は ${ys[a]}度、${b + 1}月は ${ys[b]}度 なので、${ys[a]} − ${ys[b]} ＝ ${ys[a] - ys[b]}（度）下がりました。`,
+      figure: fig,
+    });
+  }
+  // 1日の気温
+  if (t === 1) {
+    const ys = dayTemps(rng);
+    const k = numsKey(ys);
+    const fig = dayFig(ys);
+    const lead = '晴れた日の気温を、1時間ごとに調べて折れ線グラフに表しました。';
+    if (level === 1) {
+      const i = rng.int(0, DAY_TIMES.length - 1);
+      return inputQ(U, `day-read-${k}-${i}`, 1, {
+        q: `${lead}${DAY_TIMES[i]}の気温は何度ですか。`,
+        fields: [{ label: '', answer: String(ys[i]), suffix: '度' }],
+        explain: `たてのじくの1目もりは1度です（0度から10度までは、波線で省いています）。${DAY_TIMES[i]}の点は ${ys[i]}度 のところにあります。`,
+        hint: '1目もりは何度かな？ 太い線が5度ごとだよ。',
+        figure: fig,
+      });
+    }
+    const top = ys.indexOf(Math.max(...ys));
+    if (level === 2 && rng.chance(0.5)) {
+      return choiceQ(U, `day-max-${k}`, 2, {
+        q: `${lead}気温がいちばん高かったのは何時ですか。`,
+        choices: withDistractors(rng, DAY_TIMES[top], [DAY_TIMES[top - 1], DAY_TIMES[top + 1], DAY_TIMES[3], DAY_TIMES[0]].filter(Boolean)),
+        answer: DAY_TIMES[top],
+        explain: `点がいちばん上にあるのは ${DAY_TIMES[top]}で、${ys[top]}度です。晴れた日は、午後2時ごろに気温がいちばん高くなることが多いです。`,
+        figure: fig,
+      });
+    }
+    if (level === 3) {
+      const i = steepest(ys, 1);
+      if (i >= 0) {
+        const label = (j) => `${DAY_TIMES[j]}から${DAY_TIMES[j + 1]}`;
+        const others = ys.slice(1).map((_, j) => j).filter((j) => j !== i);
+        return choiceQ(U, `day-steepup-${k}`, 3, {
+          q: `${lead}気温の上がり方がいちばん大きいのは、何時から何時の間ですか。`,
+          choices: withDistractors(rng, label(i), rng.shuffle(others).map(label)),
+          answer: label(i),
+          explain: `線のかたむきが いちばん急なところです。${DAY_TIMES[i]}の ${ys[i]}度 から ${DAY_TIMES[i + 1]}の ${ys[i + 1]}度 へ、${ys[i + 1] - ys[i]}度 上がっています。`,
+          figure: fig,
+        });
+      }
+    }
+    const a = rng.int(0, top - 1);
+    const b = rng.int(a + 1, top); // 午前9時から いちばん高い時刻までは、ずっと上がっている
+    return inputQ(U, `day-diff-${k}-${a}-${b}`, level, {
+      q: `${lead}${DAY_TIMES[a]}から${DAY_TIMES[b]}までに、気温は何度上がりましたか。`,
+      fields: [{ label: '', answer: String(ys[b] - ys[a]), suffix: '度' }],
+      explain: `${DAY_TIMES[a]}は ${ys[a]}度、${DAY_TIMES[b]}は ${ys[b]}度 なので、${ys[b]} − ${ys[a]} ＝ ${ys[b] - ys[a]}（度）です。`,
+      figure: fig,
+    });
+  }
+  // けがの記録の表
+  const m = injuryTable(rng);
+  const k = numsKey(m.flat());
+  const lead = '4年生の1か月の けがの記録を、場所と けがの種類で表にまとめました。';
+  const col = INJURIES.map((_, c) => m.reduce((a, r) => a + r[c], 0));
+  const row = m.map((r) => r.reduce((a, b) => a + b, 0));
+  const total = row.reduce((a, b) => a + b, 0);
+  if (level === 2) {
+    const r = rng.int(0, PLACES.length - 1);
+    const c = rng.int(0, INJURIES.length - 1);
+    return inputQ(U, `table-cell-${k}-${r}-${c}`, 2, {
+      q: `${lead}${PLACES[r]}で${INJURIES[c]}をした人は何人ですか。`,
+      fields: [{ label: '', answer: String(m[r][c]), suffix: '人' }],
+      explain: `「${PLACES[r]}」の行と「${INJURIES[c]}」の列が交わるところを見ます。${m[r][c]}人です。`,
+      figure: injuryFig(m),
+    });
+  }
+  const t3 = rng.int(0, 2);
+  if (t3 === 0) {
+    return inputQ(U, `table-total-${k}`, 3, {
+      q: `${lead}表の「？」に入る数（けがをした人の合計）は何人ですか。`,
+      fields: [{ label: '', answer: String(total), suffix: '人' }],
+      explain: `場所ごとの合計をたすと ${row.join(' ＋ ')} ＝ ${total}（人）。けがの種類ごとの合計をたしても ${col.join(' ＋ ')} ＝ ${total}（人）になります。`,
+      hint: '合計の列（または合計の行）の数をたそう。',
+      figure: injuryFig(m, true),
+    });
+  }
+  if (t3 === 1) {
+    const ans = INJURIES[col.indexOf(Math.max(...col))];
+    return choiceQ(U, `table-kind-${k}`, 3, {
+      q: `${lead}いちばん多い けがの種類は何ですか。`,
+      choices: rng.shuffle(INJURIES),
+      answer: ans,
+      explain: `いちばん下の「合計」の行を見ます。${INJURIES.map((x, i) => `${x} ${col[i]}人`).join('、')}なので、いちばん多いのは${ans}です。`,
+      figure: injuryFig(m),
+    });
+  }
+  const ans = PLACES[row.indexOf(Math.max(...row))];
+  return choiceQ(U, `table-place-${k}`, 3, {
+    q: `${lead}けがをした人が いちばん多い場所はどこですか。`,
+    choices: rng.shuffle(PLACES),
+    answer: ans,
+    explain: `いちばん右の「合計」の列を見ます。${PLACES.map((x, i) => `${x} ${row[i]}人`).join('、')}なので、いちばん多いのは${ans}です。`,
+    figure: injuryFig(m),
+  });
+}
+
+// ---------- 垂直・平行と四角形 ----------
+
+const QUAD_DEFS = [
+  '向かい合った2組の辺が、どちらも平行な四角形',
+  '向かい合った1組の辺が平行な四角形',
+  '4つの辺の長さが、すべて等しい四角形',
+  '4つの角が、すべて直角な四角形',
+];
+
+const HEIKOU_BANK = [
+  { level: 1, q: '平行四辺形とは、どんな四角形ですか。', choices: QUAD_DEFS, a: QUAD_DEFS[0], e: '向かい合った2組の辺が、どちらも平行な四角形を平行四辺形といいます。' },
+  { level: 1, q: '台形とは、どんな四角形ですか。', choices: QUAD_DEFS, a: QUAD_DEFS[1], e: '向かい合った1組の辺が平行な四角形を台形といいます。' },
+  { level: 1, q: 'ひし形とは、どんな四角形ですか。', choices: QUAD_DEFS, a: QUAD_DEFS[2], e: '4つの辺の長さが、すべて等しい四角形をひし形といいます。' },
+  {
+    level: 2,
+    q: 'ひし形の向かい合った辺は、どうなっていますか。',
+    choices: ['2組とも平行', '1組だけ平行', 'どれも平行ではない'],
+    a: '2組とも平行',
+    e: 'ひし形は、向かい合った2組の辺がどちらも平行です。向かい合った角の大きさも等しくなっています。',
+  },
+  {
+    level: 3,
+    q: `2本の対角線が${SUIC}に交わるが、長さは等しくない四角形はどれですか。`,
+    choices: ['ひし形', '長方形', '正方形', '平行四辺形'],
+    a: 'ひし形',
+    e: `ひし形の対角線は${SUIC}に交わりますが、長さは等しくありません。正方形は、長さも等しくなります。`,
+  },
+  {
+    level: 3,
+    q: `2本の対角線の長さは等しいが、${SUIC}には交わらない四角形はどれですか。`,
+    choices: ['長方形', '正方形', 'ひし形', '平行四辺形'],
+    a: '長方形',
+    e: `長方形の対角線は長さが等しいですが、${SUIC}には交わりません。正方形は、${SUIC}にも交わります。`,
+  },
+];
+
+const PARA_ANGLES = [50, 55, 60, 65, 70, 75, 80, 100, 105, 110, 115, 120, 125, 130];
+const CROSS_ANGLES = [40, 45, 50, 55, 60, 65, 70, 75, 105, 110, 115, 120, 125, 130, 135, 140];
+const WHERE = ['ur', 'ul', 'll', 'lr'];
+const WHERE_JA = { ur: '右上', ul: '左上', ll: '左下', lr: '右下' };
+/** 2本の直線が交わってできる角（場所ごと）。theta は直線の右がわから はかったかたむき */
+export const crossAngle = (theta, where) => (where === 'ur' || where === 'll' ? theta : 180 - theta);
+
+function paraFig(a, b, angle, name = '平行四辺形') {
+  return { type: 'para', name, a, b, angle, angleText: `${angle}°`, sideA: `${a}cm`, sideB: `${b}cm` };
+}
+
+function genHeikou(level, rng) {
+  const U = 'sansu-heikou';
+  const bank = HEIKOU_BANK.map((item, i) => ({ item, i })).filter(({ item }) => item.level === level);
+  if (rng.chance(0.3)) {
+    const { item, i } = rng.pick(bank);
+    return bankQuestion(U, item, i);
+  }
+  const a = rng.int(3, 7);
+  let b = rng.int(4, 10);
+  if (b === a) b += 1;
+  const angle = rng.pick(PARA_ANGLES);
+  if (level === 1) {
+    const side = rng.pick(['AD', 'CD']);
+    const ans = side === 'AD' ? b : a;
+    return inputQ(U, `para-side-${side}-${a}-${b}-${angle}`, 1, {
+      q: `平行四辺形ABCDで、辺${side}の長さは何cmですか。`,
+      fields: [{ label: '', answer: String(ans), suffix: 'cm' }],
+      explain: `平行四辺形の向かい合った辺の長さは等しいです。辺${side}は、向かい合った辺${side === 'AD' ? 'BC' : 'AB'}と同じ ${ans}cm です。`,
+      figure: paraFig(a, b, angle),
+    });
+  }
+  if (level === 2) {
+    const t = rng.int(0, 3);
+    if (t === 0) {
+      return inputQ(U, `para-oppo-${a}-${b}-${angle}`, 2, {
+        q: '平行四辺形ABCDで、角Dの大きさは何度ですか。',
+        fields: [{ label: '', answer: String(angle), suffix: '°' }],
+        explain: `平行四辺形の向かい合った角の大きさは等しいです。角Dは、向かい合った角Bと同じ ${angle}° です。`,
+        figure: paraFig(a, b, angle),
+      });
+    }
+    if (t === 1) {
+      return inputQ(U, `para-round-${a}-${b}-${angle}`, 2, {
+        q: '平行四辺形ABCDの まわりの長さは何cmですか。',
+        fields: [{ label: '', answer: String(2 * (a + b)), suffix: 'cm' }],
+        explain: `向かい合った辺の長さは等しいので、(${a} ＋ ${b}) × 2 ＝ ${2 * (a + b)}（cm）です。`,
+        figure: paraFig(a, b, angle),
+      });
+    }
+    if (t === 2) {
+      return inputQ(U, `rhombus-round-${a}-${angle}`, 2, {
+        q: `1辺が ${a}cm のひし形があります。まわりの長さは何cmですか。`,
+        fields: [{ label: '', answer: String(4 * a), suffix: 'cm' }],
+        explain: `ひし形は4つの辺の長さがすべて等しいので、${a} × 4 ＝ ${4 * a}（cm）です。`,
+        figure: { ...paraFig(a, a, angle, 'ひし形'), sideB: '' },
+      });
+    }
+    const theta = rng.pick(CROSS_ANGLES);
+    const where = rng.pick(WHERE);
+    const v = crossAngle(theta, where);
+    return inputQ(U, `cross-same-${theta}-${where}`, 2, {
+      q: '直線アとイは平行です。「？」の角は何度ですか。',
+      fields: [{ label: '', answer: String(v), suffix: '°' }],
+      explain: `平行な直線は、ほかの直線と等しい角度で交わります。アとの交わりの${WHERE_JA[where]}の角が ${v}° なので、イとの交わりの${WHERE_JA[where]}の角も ${v}° です。`,
+      figure: { type: 'parallel', theta, given: where, ask: where },
+    });
+  }
+  const t = rng.int(0, 2);
+  if (t === 0) {
+    return inputQ(U, `para-next-${a}-${b}-${angle}`, 3, {
+      q: '平行四辺形ABCDで、角Aの大きさは何度ですか。',
+      fields: [{ label: '', answer: String(180 - angle), suffix: '°' }],
+      explain: `辺ADと辺BCは平行なので、となり合った角Aと角Bを合わせると 180° になります。180 − ${angle} ＝ ${180 - angle}（°）です。`,
+      hint: 'となり合った2つの角を合わせると何度になるかな。',
+      figure: paraFig(a, b, angle),
+    });
+  }
+  if (t === 1) {
+    const P = 2 * (a + b);
+    return inputQ(U, `para-back-${a}-${b}`, 3, {
+      q: `まわりの長さが ${P}cm の平行四辺形ABCDがあります。辺ABが ${a}cm のとき、辺BCは何cmですか。`,
+      fields: [{ label: '', answer: String(b), suffix: 'cm' }],
+      explain: `辺AB＋辺BC は、まわりの長さの半分で ${P} ÷ 2 ＝ ${P / 2}（cm）。辺BC ＝ ${P / 2} − ${a} ＝ ${b}（cm）です。`,
+      hint: '向かい合った辺の長さは等しいよ。',
+    });
+  }
+  const theta = rng.pick(CROSS_ANGLES);
+  const given = rng.pick(WHERE);
+  const ask = rng.pick(WHERE.filter((w) => w !== given));
+  const g = crossAngle(theta, given);
+  const v = crossAngle(theta, ask);
+  const explain =
+    v === g
+      ? `平行な直線は、ほかの直線と等しい角度で交わるので、イとの交わりの${WHERE_JA[given]}の角も ${g}° です。「？」の角はその角と向かい合っているので、同じ ${v}° です。`
+      : `平行な直線は、ほかの直線と等しい角度で交わるので、イとの交わりの${WHERE_JA[given]}の角も ${g}° です。「？」の角はその角ととなり合っていて、合わせると一直線（180°）なので、180 − ${g} ＝ ${v}（°）です。`;
+  return inputQ(U, `cross-other-${theta}-${given}-${ask}`, 3, {
+    q: '直線アとイは平行です。「？」の角は何度ですか。',
+    fields: [{ label: '', answer: String(v), suffix: '°' }],
+    explain,
+    hint: 'まず、イとの交わりで、アのときと同じ場所の角を考えよう。',
+    figure: { type: 'parallel', theta, given, ask },
+  });
+}
+
+// ---------- 変わり方 ----------
+
+const pairTable = (h1, xs, h2, ys) => ({ type: 'table', head: [h1, ...xs.map(String)], rows: [[h2, ...ys.map(String)]] });
+const FORMULA_WRONG = (ok, extra) => [...new Set(extra.filter((f) => f !== ok))];
+
+function genKawarikata(level, rng) {
+  const U = 'sansu-kawarikata';
+  const xs = [1, 2, 3, 4, 5];
+  const kinds = { 1: ['rect', 'square', 'age', 'price'], 2: ['rect', 'square', 'age', 'price'], 3: ['square', 'stairs', 'match', 'water'] }[level];
+  const kind = rng.pick(kinds);
+  if (kind === 'rect') {
+    const P = rng.pick([16, 18, 20, 22, 24]);
+    const S = P / 2;
+    const lead = `まわりの長さが ${P}cm の長方形をつくります。たての長さを□cm、横の長さを○cmとします。`;
+    const fig = pairTable('たて□（cm）', xs, '横○（cm）', xs.map((x) => S - x));
+    if (level === 1) {
+      const k = rng.int(6, S - 1);
+      return inputQ(U, `rect-${P}-${k}`, 1, {
+        q: `${lead}たてが ${k}cm のとき、横は何cmですか。`,
+        fields: [{ label: '', answer: String(S - k), suffix: 'cm' }],
+        explain: `たてと横をたすと、まわりの長さの半分の ${S}cm になります（□＋○＝${S}）。${S} − ${k} ＝ ${S - k}（cm）です。`,
+        hint: 'たてと横をたすと、いつも同じ数になっているよ。',
+        figure: fig,
+      });
+    }
+    const ok = `□＋○＝${S}`;
+    return choiceQ(U, `rect-f-${P}`, 2, {
+      q: `${lead}□と○の関係を式に表すと、どれですか。`,
+      choices: withDistractors(rng, ok, FORMULA_WRONG(ok, [`□＋○＝${P}`, `○−□＝${S}`, `□×○＝${S}`])),
+      answer: ok,
+      explain: `表を見ると、たてと横をたすと いつも ${S} です（まわりの長さ ${P}cm の半分）。だから □＋○＝${S} です。`,
+      figure: fig,
+    });
+  }
+  if (kind === 'square') {
+    const lead = '正方形の1辺の長さを□cm、まわりの長さを○cmとします。';
+    const fig = pairTable('1辺□（cm）', xs, 'まわり○（cm）', xs.map((x) => x * 4));
+    if (level === 1) {
+      const k = rng.int(6, 15);
+      return inputQ(U, `square-${k}`, 1, {
+        q: `${lead}1辺が ${k}cm のとき、まわりの長さは何cmですか。`,
+        fields: [{ label: '', answer: String(4 * k), suffix: 'cm' }],
+        explain: `まわりの長さは1辺の4つ分です（□×4＝○）。${k} × 4 ＝ ${4 * k}（cm）です。`,
+        figure: fig,
+      });
+    }
+    if (level === 2) {
+      const ok = '□×4＝○';
+      return choiceQ(U, 'square-f', 2, {
+        q: `${lead}□と○の関係を式に表すと、どれですか。`,
+        choices: rng.shuffle([ok, '□＋4＝○', '○×4＝□', '□×□＝○']),
+        answer: ok,
+        explain: '1辺が1cmふえると、まわりは4cmふえます。まわりの長さは1辺の4つ分なので、□×4＝○ です。',
+        figure: fig,
+      });
+    }
+    const k = rng.int(11, 25);
+    return inputQ(U, `square-back-${k}`, 3, {
+      q: `${lead}まわりの長さが ${4 * k}cm のとき、1辺の長さは何cmですか。`,
+      fields: [{ label: '', answer: String(k), suffix: 'cm' }],
+      explain: `□×4＝○ なので、□＝○÷4。${4 * k} ÷ 4 ＝ ${k}（cm）です。`,
+      figure: fig,
+    });
+  }
+  if (kind === 'age') {
+    const d = rng.int(2, 6);
+    const lead = `ゆうきさんは、弟より ${d}才年上です。弟の年れいを□才、ゆうきさんの年れいを○才とします。`;
+    const fig = pairTable('弟□（才）', xs, 'ゆうき○（才）', xs.map((x) => x + d));
+    if (level === 1) {
+      const k = rng.int(6, 10);
+      return inputQ(U, `age-${d}-${k}`, 1, {
+        q: `${lead}弟が ${k}才のとき、ゆうきさんは何才ですか。`,
+        fields: [{ label: '', answer: String(k + d), suffix: '才' }],
+        explain: `ゆうきさんは、いつも弟より ${d}才上です（□＋${d}＝○）。${k} ＋ ${d} ＝ ${k + d}（才）です。`,
+        figure: fig,
+      });
+    }
+    const ok = `□＋${d}＝○`;
+    return choiceQ(U, `age-f-${d}`, 2, {
+      q: `${lead}□と○の関係を式に表すと、どれですか。`,
+      choices: withDistractors(rng, ok, FORMULA_WRONG(ok, [`□×${d}＝○`, `○＋${d}＝□`, `□−${d}＝○`])),
+      answer: ok,
+      explain: `2人の年れいのちがいは、いつも ${d}才です。弟の年れいに ${d} をたすと ゆうきさんの年れいになるので、□＋${d}＝○ です。`,
+      figure: fig,
+    });
+  }
+  if (kind === 'price') {
+    const p = rng.pick([40, 50, 60, 70, 80, 90, 120]);
+    const lead = `1本 ${p}円のえん筆を□本買うときの代金を○円とします。`;
+    const fig = pairTable('本数□（本）', xs, '代金○（円）', xs.map((x) => x * p));
+    if (level === 1) {
+      const k = rng.int(6, 12);
+      return inputQ(U, `price-${p}-${k}`, 1, {
+        q: `${lead}${k}本買うと、代金は何円ですか。`,
+        fields: [{ label: '', answer: String(p * k), suffix: '円' }],
+        explain: `代金は ${p}円の□本分です（${p}×□＝○）。${p} × ${k} ＝ ${p * k}（円）です。`,
+        figure: fig,
+      });
+    }
+    const ok = `${p}×□＝○`;
+    return choiceQ(U, `price-f-${p}`, 2, {
+      q: `${lead}□と○の関係を式に表すと、どれですか。`,
+      choices: withDistractors(rng, ok, FORMULA_WRONG(ok, [`${p}＋□＝○`, `□÷${p}＝○`, `${p}−□＝○`])),
+      answer: ok,
+      explain: `1本ふえるごとに、代金は ${p}円ずつふえます。だから ${p}×□＝○ です。`,
+      figure: fig,
+    });
+  }
+  if (kind === 'stairs') {
+    const k = rng.int(6, 15);
+    return inputQ(U, `stairs-${k}`, 3, {
+      q: `1辺1cmの正方形を、{階段|かいだん}の形にならべていきます。だんの数が ${k}だんのとき、まわりの長さは何cmですか。`,
+      fields: [{ label: '', answer: String(4 * k), suffix: 'cm' }],
+      explain: `表を見ると、だんが1ふえると まわりの長さは4cmずつふえ、だんの数の4倍になっています（□×4＝○）。${k} × 4 ＝ ${4 * k}（cm）です。`,
+      hint: 'だんが1ふえると、まわりの長さは何cmふえるかな。',
+      figure: pairTable('だんの数□', [1, 2, 3, 4], 'まわり○（cm）', [4, 8, 12, 16]),
+    });
+  }
+  if (kind === 'match') {
+    const k = rng.int(6, 15);
+    return inputQ(U, `match-${k}`, 3, {
+      q: `同じ長さのぼうで、正方形を横に1列につなげてつくります。正方形を ${k}こつくるとき、ぼうは何本いりますか。`,
+      fields: [{ label: '', answer: String(3 * k + 1), suffix: '本' }],
+      explain: `正方形が1こふえるごとに、ぼうは3本ずつふえます。はじめの1本に3本ずつたすと考えて、1 ＋ 3 × ${k} ＝ ${3 * k + 1}（本）です。`,
+      hint: '正方形が1こふえると、ぼうは何本ふえるかな。',
+      figure: pairTable('正方形□（こ）', [1, 2, 3, 4], 'ぼう○（本）', [4, 7, 10, 13]),
+    });
+  }
+  const a = rng.int(2, 6);
+  const x = rng.int(2, 5);
+  const k = rng.int(6, 12);
+  return inputQ(U, `water-${a}-${x}-${k}`, 3, {
+    q: `水が ${a}L 入っている水そうに、1分間に ${x}L ずつ水を入れます。${k}分後には、水は何Lになりますか。`,
+    fields: [{ label: '', answer: String(a + x * k), suffix: 'L' }],
+    explain: `1分ごとに ${x}L ずつふえるので、${k}分で ${x} × ${k} ＝ ${x * k}（L）ふえます。はじめの ${a}L とあわせて ${a} ＋ ${x * k} ＝ ${a + x * k}（L）です。`,
+    hint: 'はじめに入っていた水をわすれないでね。',
+    figure: pairTable('時間□（分）', [0, 1, 2, 3, 4], '水○（L）', [0, 1, 2, 3, 4].map((m) => a + x * m)),
+  });
+}
+
+// ---------- 何倍でくらべる（かんたんな割合） ----------
+
+function genBai(level, rng) {
+  const U = 'sansu-bai';
+  if (level === 1) {
+    const B = rng.pick([10, 12, 15, 20, 25, 30, 40]);
+    const k = rng.int(2, 8);
+    if (rng.chance(0.5)) {
+      return inputQ(U, `times-${B}-${k}`, 1, {
+        q: `${B * k}cm は、${B}cm の何倍ですか。`,
+        fields: [{ label: '', answer: String(k), suffix: '倍' }],
+        explain: `何倍かは わり算でもとめます。${B * k} ÷ ${B} ＝ ${k} なので、${k}倍です。`,
+      });
+    }
+    return inputQ(U, `of-${B}-${k}`, 1, {
+      q: `${B}cm の ${k}倍は何cmですか。`,
+      fields: [{ label: '', answer: String(B * k), suffix: 'cm' }],
+      explain: `${B} × ${k} ＝ ${B * k}（cm）です。`,
+    });
+  }
+  if (level === 2) {
+    if (rng.chance(0.4)) {
+      const B = rng.pick([6, 8, 9, 12, 15, 18, 24]);
+      const k = rng.int(2, 7);
+      return inputQ(U, `base-${B}-${k}`, 2, {
+        q: `あるテープの長さの ${k}倍は ${B * k}cm です。もとのテープの長さは何cmですか。`,
+        fields: [{ label: '', answer: String(B), suffix: 'cm' }],
+        explain: `もとの長さを□cmとすると、□ × ${k} ＝ ${B * k}。□ ＝ ${B * k} ÷ ${k} ＝ ${B}（cm）です。`,
+        hint: 'もとの長さを□にして、かけ算の式に表してみよう。',
+      });
+    }
+    for (;;) {
+      const a1 = rng.pick([10, 20, 30, 40]);
+      const a2 = rng.pick([10, 20, 30, 40]);
+      const k1 = rng.int(2, 5);
+      const k2 = rng.int(2, 5);
+      if (a1 === a2 || k1 === k2) continue;
+      const ans = k1 > k2 ? '赤いゴム' : '青いゴム';
+      return choiceQ(U, `rubber-${a1}-${k1}-${a2}-${k2}`, 2, {
+        q: `赤いゴムは ${a1}cm が ${a1 * k1}cm に、青いゴムは ${a2}cm が ${a2 * k2}cm にのびました。もとの長さの何倍にのびたかで くらべると、よくのびるといえるのはどちらですか。`,
+        choices: ['赤いゴム', '青いゴム', 'どちらも同じ'],
+        answer: ans,
+        explain: `赤いゴムは ${a1 * k1} ÷ ${a1} ＝ ${k1}（倍）、青いゴムは ${a2 * k2} ÷ ${a2} ＝ ${k2}（倍）にのびました。何倍かが大きい${ans}のほうが、よくのびるといえます。`,
+      });
+    }
+  }
+  if (rng.chance(0.5)) {
+    for (;;) {
+      const a = rng.pick([10, 20, 30]);
+      const k1 = rng.int(3, 5);
+      const d = a * (k1 - 1);
+      const k2 = rng.int(2, k1 - 1);
+      const c = d / (k2 - 1);
+      if (!Number.isInteger(c) || c === a || c > 100) continue;
+      const bySub = rng.chance(0.5);
+      const lead = `赤いゴムは ${a}cm が ${a * k1}cm に、青いゴムは ${c}cm が ${c * k2}cm にのびました。`;
+      if (bySub) {
+        return choiceQ(U, `diff-${a}-${k1}-${c}-${k2}`, 3, {
+          q: `${lead}のびた長さ（ちがい）で くらべると、どうなりますか。`,
+          choices: ['赤いゴム', '青いゴム', 'どちらも同じ'],
+          answer: 'どちらも同じ',
+          explain: `赤は ${a * k1} − ${a} ＝ ${d}（cm）、青は ${c * k2} − ${c} ＝ ${d}（cm）のびたので、ちがいでくらべると どちらも同じです。何倍かでくらべると、赤は ${k1}倍、青は ${k2}倍です。`,
+        });
+      }
+      return choiceQ(U, `ratio-${a}-${k1}-${c}-${k2}`, 3, {
+        q: `${lead}もとの長さの何倍にのびたかで くらべると、よくのびるといえるのはどちらですか。`,
+        choices: ['赤いゴム', '青いゴム', 'どちらも同じ'],
+        answer: '赤いゴム',
+        explain: `のびた長さはどちらも ${d}cm ですが、赤は ${k1}倍、青は ${k2}倍にのびました。何倍かでくらべると、赤いゴムのほうがよくのびるといえます。`,
+      });
+    }
+  }
+  const k1 = rng.int(2, 5);
+  const k2 = rng.int(2, 5);
+  return inputQ(U, `chain-${k1}-${k2}`, 3, {
+    q: `赤いリボンの長さは 青いリボンの ${k1}倍、青いリボンの長さは 黄色いリボンの ${k2}倍です。赤いリボンの長さは、黄色いリボンの何倍ですか。`,
+    fields: [{ label: '', answer: String(k1 * k2), suffix: '倍' }],
+    explain: `黄色を1とすると、青は ${k2}、赤は ${k2} の ${k1}倍で ${k2} × ${k1} ＝ ${k1 * k2}。だから ${k1 * k2}倍です。`,
+    hint: '黄色いリボンの長さを1として考えてみよう。',
+  });
+}
+
 // ---------- 単元の一覧 ----------
 
 export default {
   subject: 'sansu',
   units: [
     { id: 'sansu-ookinakazu', title: '大きな数', icon: '🔢', description: '億・兆のしくみ', generate: genOokinakazu },
+    { id: 'sansu-graph', title: '折れ線グラフと表', icon: '📈', description: '折れ線グラフの読み方・表の整理', generate: genGraph },
     { id: 'sansu-warizan', title: 'わり算', icon: '➗', description: '1けた・2けたでわる計算', generate: genWarizan },
     { id: 'sansu-hissan', title: '小数の筆算', icon: '✍️', description: '小数のたし算・ひき算を筆算で', generate: genHissan },
     { id: 'sansu-shousuu', title: '小数のかけ算・わり算', icon: '✖️', description: '小数 × 整数、小数 ÷ 整数', generate: genShousuu },
@@ -1177,6 +1820,9 @@ export default {
     { id: 'sansu-gaisuu', title: 'がい数', icon: '🎯', description: '{四捨五入|ししゃごにゅう}と見積もり', generate: genGaisuu },
     { id: 'sansu-keisan', title: '計算のきまり', icon: '🧮', description: '計算のじゅんじょとくふう', generate: genKeisan },
     { id: 'sansu-kakudo', title: '角と図形', icon: '📐', description: '角度・四角形・直方体', generate: genKakudo },
+    { id: 'sansu-heikou', title: '{垂直|すいちょく}・平行と四角形', icon: '📏', description: '平行な直線と角・平行四辺形・ひし形', generate: genHeikou },
     { id: 'sansu-menseki', title: '面積', icon: '🟩', description: 'cm²・m²・a・ha・km²', generate: genMenseki },
+    { id: 'sansu-kawarikata', title: '変わり方', icon: '🔁', description: '2つの量の変わり方を表や式で調べる', generate: genKawarikata },
+    { id: 'sansu-bai', title: '何倍でくらべる', icon: '📊', description: 'もとにする大きさの何倍かでくらべる', generate: genBai },
   ],
 };

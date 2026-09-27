@@ -577,6 +577,18 @@ body[data-theme='space'] .combo { color: #fff; }
 .qcard__figure { margin: 10px auto 0; max-width: 360px; }
 .figure { width: 100%; height: auto; }
 .fig-label { font: 700 13px var(--font); fill: var(--ink); }
+.figure--graph { max-width: 360px; }
+.fig-grid { stroke: #d9dcef; stroke-width: 1; }
+.fig-grid--major { stroke: #9aa0c4; }
+.fig-axis { stroke: var(--ink); stroke-width: 2; }
+.fig-wave { fill: none; stroke: var(--ink); stroke-width: 2; paint-order: stroke; }
+.fig-line { fill: none; stroke: var(--c, #2f8dff); stroke-width: 3; stroke-linejoin: round; }
+.fig-dot { fill: #fff; stroke: var(--c, #2f8dff); stroke-width: 2.5; }
+.fig-table { width: 100%; border-collapse: collapse; font-size: 15px; font-weight: 700; background: #fff; font-variant-numeric: tabular-nums; }
+.fig-table caption { font-size: 13px; color: var(--ink-soft); margin-bottom: 4px; }
+.fig-table th, .fig-table td { border: 2px solid var(--ink); padding: 4px 6px; text-align: center; }
+.fig-table thead th, .fig-table tbody th { background: var(--l, #eef3ff); font-size: 13px; }
+.fig-table td.ask { background: var(--yellow-l); color: #d0312d; }
 .speak-btn { margin: 8px auto 0; display: inline-flex; font-size: 15px; font-weight: 800; padding: 6px 14px; border-radius: 999px; border: 2px solid var(--ink); background: var(--lav-l); box-shadow: var(--shadow-s); }
 .speak-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink); }
 
