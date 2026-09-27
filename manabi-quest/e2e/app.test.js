@@ -50,8 +50,8 @@ async function currentQuestion(page) {
   return page.evaluate(() => JSON.parse(JSON.stringify(globalThis.__mqQuiz.question)));
 }
 
-/** 今の問題に答える（correct=false ならわざとまちがえる） */
-async function answer(page, correct = true) {
+/** 今の問題に答える（correct=false ならわざとまちがえる。next=false なら「つぎへ」をおさない） */
+async function answer(page, correct = true, { next = true } = {}) {
   const q = await currentQuestion(page);
   if (q.kind === 'choice') {
     const idx = correct ? q.choices.indexOf(q.answer) : q.choices.findIndex((c) => c !== q.answer);
@@ -73,8 +73,15 @@ async function answer(page, correct = true) {
   await page.waitForSelector('#feedback:not([hidden])');
   const ok = await page.$eval('#feedback', (el) => el.classList.contains('feedback--ok'));
   assert.equal(ok, correct, `答え合わせ: ${q.id}`);
-  await page.click('[data-act="next"]');
+  if (next) await page.click('[data-act="next"]');
   return q;
+}
+
+/** ブラウザの「もどる」「すすむ」 */
+async function historyGo(page, delta) {
+  const from = await page.evaluate(() => location.href);
+  await page.evaluate((d) => history.go(d), delta);
+  await page.waitForFunction((h) => location.href !== h, from);
 }
 
 async function playStage(page, n, correct = true) {
@@ -245,6 +252,40 @@ test('画面を開くときに別の画面へ転送されても、前の画面�
   await page.click('[data-tab="friends"]');
   await page.click('[data-act="partner"][data-id="koala"]');
   await page.waitForFunction(() => globalThis.__mq.store.state.partner === 'koala');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('答えたあとに「もどる」→「すすむ」しても、同じ問題に二度は答えられない', async () => {
+  const { page, errors, context } = await openApp();
+  await page.click('.subject-card[data-id="rika"]');
+  await page.click('.unit-card');
+  const q1 = await answer(page, true, { next: false });
+  const coins1 = await coins(page);
+  await historyGo(page, -1);
+  await page.waitForSelector('.unit-card');
+  await historyGo(page, 1);
+  const q2 = await currentQuestion(page);
+  assert.notEqual(q2.id, q1.id, 'つぎの問題から つづく');
+  assert.equal(await page.textContent('#ok-n'), '1');
+  assert.equal(await coins(page), coins1, 'もどっただけでは コインはふえない');
+  await playStage(page, 4);
+  assert.match(await page.textContent('.result-score'), /5\s*\/\s*5/);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('EXのとちゅうで「もどる」をおしても、前のけっか画面から EX に入りなおせない', async () => {
+  const { page, errors, context } = await openApp();
+  await page.click('.subject-card[data-id="rika"]');
+  await page.click('.unit-card');
+  await playStage(page, 5);
+  await page.click('[data-act="ex"]');
+  await page.waitForSelector('.stage-tag--ex1');
+  await answer(page, false, { next: false });
+  await historyGo(page, -1);
+  await page.waitForSelector('section.home');
+  assert.equal(await page.$('[data-act="ex"]'), null);
   assert.deepEqual(errors, []);
   await context.close();
 });

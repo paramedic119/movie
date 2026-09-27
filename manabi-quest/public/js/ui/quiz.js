@@ -17,10 +17,12 @@ const isEnglish = (s) => /^[\x20-\x7E]+$/.test(s) && /[A-Za-z]/.test(s);
 
 export function mountQuiz(root, ctx) {
   const s = ctx.session;
-  if (!s || s.index >= s.questions.length) {
+  if (!s) {
     ctx.go('#/');
     return () => {};
   }
+  // 答えたあとに「もどる」→「すすむ」で この画面にもどってきたときは、同じ問題に二度答えられないように先へすすめる
+  s.index = Math.max(s.index, s.results.length);
   const { fx, sfx, speech, store } = ctx;
   const titleSubject = ctx.subjectMeta(s.subjectId) ?? ctx.subjectMeta('review');
   const crossSubject = s.subjectId === 'review' || s.subjectId === 'daily';
@@ -33,6 +35,15 @@ export function mountQuiz(root, ctx) {
   let fields = null; // { values: string[], active: number }
   let shownAt = 0; // 問題を出した時刻（連打で次の問題に答えてしまわないように）
   const tooSoon = () => performance.now() - shownAt < 280;
+  // 少しあとに動かす処理（画面をはなれたら取り消す）
+  const timers = new Set();
+  const later = (fn, ms) => {
+    const id = setTimeout(() => {
+      timers.delete(id);
+      fn();
+    }, ms);
+    timers.add(id);
+  };
 
   root.innerHTML = `
     <section class="quiz" style="--c:${titleSubject.color};--l:${titleSubject.light}">
@@ -128,7 +139,7 @@ export function mountQuiz(root, ctx) {
       ${q.kind === 'input' ? '<div class="fields" id="fields"></div>' : ''}
       ${q.kind === 'hissan' ? '<div class="hissan-wrap" id="hissan"></div>' : ''}
     `;
-    if (canSpeak) setTimeout(() => speech.speak(speakText()), 350);
+    if (canSpeak) later(() => speech.speak(speakText()), 350);
   }
 
   function renderFields() {
@@ -273,7 +284,7 @@ export function mountQuiz(root, ctx) {
         }
       });
       if (s.combo >= 3) {
-        setTimeout(() => sfx.combo(s.combo), 250);
+        later(() => sfx.combo(s.combo), 250);
         say(`${s.combo}れんぞく！ ${PRAISE[s.combo % PRAISE.length]}`);
       } else {
         say(PRAISE[Math.floor(Math.random() * PRAISE.length)]);
@@ -308,7 +319,7 @@ export function mountQuiz(root, ctx) {
     $feedback.hidden = false;
     if (q.kind === 'choice') markChoices();
     renderFieldsIfAny();
-    setTimeout(() => $('[data-act="next"]', $feedback)?.focus({ preventScroll: true }), 50);
+    later(() => $('[data-act="next"]', $feedback)?.focus({ preventScroll: true }), 50);
   }
 
   function renderFieldsIfAny() {
@@ -520,12 +531,14 @@ export function mountQuiz(root, ctx) {
     };
   }
 
-  showQuestion();
+  if (s.index >= s.questions.length) finish();
+  else showQuestion();
 
   return () => {
     offAct();
     offSpeechFail();
     document.removeEventListener('keydown', onKey);
+    timers.forEach(clearTimeout);
     speech.cancel();
     if (ctx.debug) delete globalThis.__mqQuiz;
   };

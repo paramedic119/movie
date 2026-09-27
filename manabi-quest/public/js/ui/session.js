@@ -33,6 +33,8 @@ function begin(ctx, { subjectId, unitId = null, homeUnitId = unitId, unitTitle, 
     mastered: [],
     startedAt: Date.now(),
   };
+  // 前のけっか画面には もどれないようにする（「もどる」でEXステージに何度も入れないように）
+  ctx.lastResult = null;
   ctx.go('#/play');
   return true;
 }

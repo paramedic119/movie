@@ -4,6 +4,7 @@ import { esc } from './dom.js';
 
 let root = null;
 let toastTimer = 0;
+const openDismissers = new Set();
 
 function ensureRoot() {
   if (!root) root = document.getElementById('modal-root');
@@ -31,12 +32,18 @@ export function openModal({ title, body = '', actions = [{ label: 'OK', value: t
             .join('')}
         </div>
       </div>`;
+    let closed = false;
     const close = (value) => {
+      if (closed) return;
+      closed = true;
+      openDismissers.delete(dismiss);
       document.removeEventListener('keydown', onKey, true);
       wrap.remove();
       if (prevFocus && typeof prevFocus.focus === 'function') prevFocus.focus();
       resolve(value);
     };
+    const dismiss = () => close(dismissValue);
+    openDismissers.add(dismiss);
     const onKey = (e) => {
       if (e.key === 'Escape') {
         e.stopPropagation();
@@ -53,6 +60,11 @@ export function openModal({ title, body = '', actions = [{ label: 'OK', value: t
     const primary = wrap.querySelector('.btn--primary, .btn--ex') ?? wrap.querySelector('button');
     primary?.focus();
   });
+}
+
+/** 画面を切りかえるときに、開いているダイアログを「とじる」をえらんだあつかいで閉じる */
+export function closeAllModals() {
+  [...openDismissers].forEach((dismiss) => dismiss());
 }
 
 /** 画面の下に短いお知らせを出す */

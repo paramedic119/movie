@@ -104,14 +104,15 @@ export function mountHome(root, ctx) {
       </div>
     </section>`;
 
+  let guideTimer = 0;
   if (!st.seenGuide) {
     ctx.store.update((state) => {
       state.seenGuide = true;
     });
-    setTimeout(() => showGuide(ctx), 300);
+    guideTimer = setTimeout(() => showGuide(ctx), 300);
   }
 
-  return onAct(root, {
+  const offAct = onAct(root, {
     subject: (el) => ctx.go(`#/subject/${el.dataset.id}`),
     review: () => startReview(ctx),
     daily: () => startDaily(ctx),
@@ -122,4 +123,8 @@ export function mountHome(root, ctx) {
       bubble.textContent = partner.line;
     },
   });
+  return () => {
+    offAct();
+    clearTimeout(guideTimer);
+  };
 }

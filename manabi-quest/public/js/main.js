@@ -8,7 +8,7 @@ import { withCommas } from './lib/numfmt.js';
 import { createFx } from './fx/effects.js';
 import { sfx } from './fx/sound.js';
 import { speech } from './fx/speech.js';
-import { toast } from './ui/modal.js';
+import { toast, closeAllModals } from './ui/modal.js';
 import { minutesText } from './ui/dom.js';
 import { mountHome } from './ui/home.js';
 import { mountSubject } from './ui/subject.js';
@@ -98,6 +98,8 @@ async function boot() {
     store,
     onChange: (status) => {
       updateTime(status);
+      // 延長したときや日がかわったときは、また5分前にお知らせする
+      if (!status.warn) warned = false;
       if (status.warn && !warned) {
         warned = true;
         toast('⏰ きょうの のこり時間は あと5分だよ');
@@ -144,6 +146,8 @@ async function boot() {
       }
     }
     const route = ROUTES[name];
+    // 前の画面のダイアログは閉じてから切りかえる（あとで前の画面の処理が動かないように）
+    closeAllModals();
     unmount();
     unmount = () => {};
     screen.innerHTML = '';
