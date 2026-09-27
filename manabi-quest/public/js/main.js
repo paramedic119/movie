@@ -93,7 +93,11 @@ async function boot() {
     },
     refreshHud,
   };
-  ctx.fx = createFx({ layer: document.getElementById('fx-layer'), getLevel: () => store.state.settings.effects });
+  ctx.fx = createFx({
+    layer: document.getElementById('fx-layer'),
+    back: document.getElementById('fx-back'),
+    getLevel: () => store.state.settings.effects,
+  });
 
   let warned = false;
   ctx.playtime = createPlaytime({

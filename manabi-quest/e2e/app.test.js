@@ -533,6 +533,42 @@ test('演出「おだやか」：たからばこは すぐに さいごのラン
   await context.close();
 });
 
+test('派手な演出：正解で 看板・ふきだし・リボン、EXの入口で ひかりの線とふうせん（「おだやか」では出さない）', async () => {
+  const fxCount = (page) =>
+    page.evaluate(() => ({
+      sign: document.querySelectorAll('#fx-layer .fx-sign').length,
+      pop: document.querySelectorAll('#fx-layer .fx-pop').length,
+      streamers: document.querySelectorAll('#fx-layer .fx-streamers').length,
+      back: document.querySelectorAll('#fx-back > *').length,
+    }));
+  const { page, errors, context } = await openApp();
+  await noGolden(page);
+  await page.click('.subject-card[data-id="rika"]');
+  await page.click('.unit-card');
+  for (let i = 0; i < 3; i += 1) await answer(page, true, { next: i < 2 });
+  const lively = await fxCount(page);
+  assert.ok(lively.sign >= 1 && lively.pop >= 1, `看板とふきだし ${JSON.stringify(lively)}`);
+  await page.waitForSelector('#fx-layer .fx-streamers', { state: 'attached' });
+  await page.click('[data-act="next"]');
+  await playStage(page, 2);
+  await page.click('[data-act="ex"]');
+  await page.waitForFunction(() => document.querySelectorAll('#fx-back .fx-balloon, #fx-back .fx-sunburst').length > 0);
+  await currentQuestion(page);
+  assert.deepEqual(errors, []);
+  await context.close();
+
+  const calm = await openApp({
+    init: () => localStorage.setItem('manabi-quest:v1', JSON.stringify({ v: 1, seenGuide: true, settings: { effects: 'calm' } })),
+  });
+  await noGolden(calm.page);
+  await calm.page.click('.subject-card[data-id="rika"]');
+  await calm.page.click('.unit-card');
+  for (let i = 0; i < 3; i += 1) await answer(calm.page, true, { next: i < 2 });
+  assert.deepEqual(await fxCount(calm.page), { sign: 0, pop: 0, streamers: 0, back: 0 }, '「おだやか」では出さない');
+  assert.deepEqual(calm.errors, []);
+  await calm.context.close();
+});
+
 test('おうちの方ページ：ゴールデン問題をオフにできる', async () => {
   const { page, context } = await openApp({
     init: () => localStorage.setItem('manabi-quest:v1', JSON.stringify({ v: 1, seenGuide: true, pin: '1234' })),

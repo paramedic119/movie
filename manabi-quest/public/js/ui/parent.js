@@ -260,7 +260,7 @@ export function mountParent(root, ctx) {
                 .map(([v, l]) => `<label class="seg__opt"><input type="radio" name="effects" value="${v}" ${set.effects === v ? 'checked' : ''} data-setting="effects"><span>${l}</span></label>`)
                 .join('')}
             </div>
-            <p class="small muted">「おだやか」はコインが飛ぶ・紙ふぶきなどの動きを止め、刺激をおさえます。</p>
+            <p class="small muted">「おだやか」はコインが飛ぶ・紙ふぶき・看板・リボン・ふうせんなどの動きを止め、刺激をおさえます。「にぎやか」はリボンや紙ふぶきが最も多くなります。</p>
           </fieldset>
           <label class="setting setting--row"><span>ゴールデン問題<small class="setting__note">ときどき出る、正解するとコインが3倍になる問題</small></span><input type="checkbox" class="toggle" data-setting="golden" ${set.golden ? 'checked' : ''}></label>
           <label class="setting setting--row"><span>効果音</span><input type="checkbox" class="toggle" data-setting="sound" ${set.sound ? 'checked' : ''}></label>

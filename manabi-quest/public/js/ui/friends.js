@@ -116,6 +116,9 @@ export function mountFriends(root, ctx, params) {
     ctx.fx.burst(c.x, c.y + 120);
     if (kind === 'friend') {
       ctx.fx.confetti(1200);
+      // あたらしい なかまが いっぱい とびだして、リボンが ビュン
+      ctx.fx.explode(c.x, c.y + 160, [item.emoji, item.emoji, '🎉', '💖'], 16);
+      ctx.fx.streamers(4);
       await openModal({
         title: `${item.emoji} ${esc(item.name)} が なかまになった！`,
         body: `<p class="big-emoji">${item.emoji}</p><p>「${esc(item.line)}」</p>`,

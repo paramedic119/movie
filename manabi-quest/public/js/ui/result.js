@@ -50,6 +50,8 @@ const CHEST_SVG = `<svg class="chest__svg" viewBox="0 0 64 56" aria-hidden="true
 
 // たからばこの ランクアップの間かく（ミリ秒）
 const RANK_STEP_MS = 520;
+// ランクの色（しょうげきはの わっか）
+const RANK_COLOR = { 1: '#c46b35', 2: '#b4c1d6', 3: '#ffc21a', 4: '#ff5d8f' };
 
 function gaugeInner(t, earned) {
   const next = t.next ? `つぎの しょうごうまで あと ${withCommas(t.next.min - earned)}` : 'さいこうの しょうごう！';
@@ -255,12 +257,20 @@ export function mountResult(root, ctx) {
     }, T.star + i * 220);
   });
 
-  // 先生のハンコを「ポン」
+  // 先生のハンコを「ポン」。パーフェクトなら なかまが ドカンと とびだす
   later(() => {
     fx.stamp($('.stamp', root));
     sfx.stamp();
     fx.thud($card);
-    if (perfect) fx.confetti(r.stageKind === 'ex3' ? 3200 : 1800);
+    if (perfect) {
+      fx.confetti(r.stageKind === 'ex3' ? 3200 : 1800);
+      const m = fx.centerOf($('.result-medal', root));
+      const emojis = [...new Set(ctx.store.state.friends)].map((id) => friendById(id).emoji);
+      fx.explode(m.x, m.y, [...emojis, '🎉', '⭐', '💖']);
+      fx.streamers();
+      fx.sunburst(2200);
+      if (r.stageKind === 'ex3') fx.balloons();
+    }
   }, T.stamp);
 
   // ボーナスの たからばこ（タップで開く。しばらくすると自動で開く）
@@ -277,6 +287,8 @@ export function mountResult(root, ctx) {
     sfx.chest();
     const c = fx.centerOf(chest);
     fx.burst(c.x, c.y);
+    fx.shockwave(c.x, c.y, { color: RANK_COLOR[treasure.rank] ?? '#ffc21a', size: 1.3 });
+    fx.fountain(c.x, c.y);
     const pill = $('.result-coins', root);
     let started = false;
     fx.coins(chest, pill, r.bonus, (i) => {
@@ -300,6 +312,7 @@ export function mountResult(root, ctx) {
     fx.pop(el);
     const c = fx.centerOf(el);
     fx.burst(c.x, c.y, { count: 10 });
+    fx.shockwave(c.x, c.y, { color: RANK_COLOR[step.rank] });
     // 文字が画面からはみ出さないように、よこは画面のまん中に出す
     fx.floatText(globalThis.innerWidth / 2, c.y - 50, `${step.label} ランクアップ！`, 'rank-text');
   }
@@ -343,6 +356,8 @@ export function mountResult(root, ctx) {
       fx.pop($('.gauge__emoji', gauge));
       const c = fx.centerOf(gauge);
       fx.burst(c.x, c.y);
+      const e = fx.centerOf($('.gauge__emoji', gauge));
+      fx.explode(e.x, e.y, [gTo.current.emoji, '✨', '⭐'], 14);
       if (!calm) fx.banner('しょうごう アップ！', { sub: `${gTo.current.emoji} ${gTo.current.name}`, variant: 'gold', duration: 1100, pass: true });
       grow(0, gTo.progress, 700);
     };
@@ -359,6 +374,7 @@ export function mountResult(root, ctx) {
 
   if (ex) {
     later(() => sfx.ex(), T.ex + 150);
+    later(() => fx.streamers(4), T.ex + 100);
   } else if (r.stageKind === 'ex3' && perfect) {
     later(() => fx.banner('MASTER!', { sub: 'たんげんマスター', variant: 'gold', duration: 1800, pass: true }), T.stamp + 400);
   }

@@ -4,24 +4,37 @@
 
 import { withCommas } from '../lib/numfmt.js';
 
+// juice … 参考動画のような「派手な」演出の強さ（0=なし、1=ふつう、2=にぎやか）
 const LEVELS = {
-  calm: { particles: 0, coins: 0, confetti: 0, ring: false },
-  normal: { particles: 14, coins: 6, confetti: 70, ring: true },
-  exciting: { particles: 26, coins: 12, confetti: 150, ring: true },
+  calm: { particles: 0, coins: 0, confetti: 0, ring: false, juice: 0, streamers: 0, balloons: 0, explode: 0, fountain: 0 },
+  normal: { particles: 14, coins: 6, confetti: 70, ring: true, juice: 1, streamers: 5, balloons: 8, explode: 18, fountain: 10 },
+  exciting: { particles: 26, coins: 12, confetti: 150, ring: true, juice: 2, streamers: 9, balloons: 14, explode: 32, fountain: 20 },
 };
 
 const SHAPES = ['★', '●', '♥', '✦', '▲'];
 const COLORS = ['#ff5d8f', '#ffc300', '#2f8dff', '#1fb574', '#8a63ff', '#ff8a1f'];
+const STREAMER_COLORS = ['#ffcf33', '#ff5d8f', '#2fc4b2', '#5b8dff', '#a26bff', '#ff9f1c'];
+const BALLOON_COLORS = ['#ff8fb8', '#b59cff', '#62dca8', '#ffd23f', '#6cb8ff', '#ff9f6b'];
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const rand = (a, b) => a + Math.random() * (b - a);
 
 const centerOf = (el) => {
   const r = el.getBoundingClientRect();
   return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
 };
 
-export function createFx({ layer, getLevel }) {
+/**
+ * @param {{layer:HTMLElement, back?:HTMLElement|null, getLevel:()=>string}} opts
+ *   layer … 画面の いちばん上（ボタンは押せる）。back … 画面の うしろ（ひかりの線・ふうせん）
+ */
+export function createFx({ layer, back = null, getLevel }) {
   const cfg = () => LEVELS[getLevel()] ?? LEVELS.normal;
   const add = (el) => {
     layer.appendChild(el);
+    return el;
+  };
+  const addBack = (el) => {
+    (back ?? layer).appendChild(el);
     return el;
   };
   const done = (anim, el) => {
@@ -188,9 +201,308 @@ export function createFx({ layer, getLevel }) {
       });
     },
 
-    /** 出ているバナーをすぐに終わらせる（画面を切りかえるとき） */
+    /** 出ているバナー・看板をすぐに終わらせる（画面を切りかえるとき） */
     clearBanners() {
       [...banners].forEach((anim) => anim.finish());
+    },
+
+    // ---------- 参考動画のような 派手な演出（「おだやか」では出さない） ----------
+
+    /**
+     * なかまが 上から ロープで ぶらさがって、看板を見せる（ゆらゆら ゆれて 上へ もどる）。
+     * 下のボタンは そのまま押せる。前の看板は すぐに しまう
+     */
+    sign(text, { emoji = '🐘', variant = '' } = {}) {
+      if (!cfg().juice) return Promise.resolve();
+      [...banners].filter((a) => a.sign).forEach((a) => a.finish());
+      const el = add(document.createElement('div'));
+      el.className = `fx-sign ${variant ? `fx-sign--${variant}` : ''}`;
+      el.innerHTML = '<span class="fx-sign__rope"></span><span class="fx-sign__board"></span><span class="fx-sign__buddy"></span>';
+      el.querySelector('.fx-sign__board').textContent = text;
+      el.querySelector('.fx-sign__buddy').textContent = emoji;
+      el.style.setProperty('--len', String(Math.max(4, [...text].length)));
+      const anim = el.animate(
+        [
+          { transform: 'translate(-50%, -110%) rotate(0deg)' },
+          { transform: 'translate(-50%, 6%) rotate(-8deg)', offset: 0.2 },
+          { transform: 'translate(-50%, -3%) rotate(6deg)', offset: 0.34 },
+          { transform: 'translate(-50%, 1%) rotate(-3deg)', offset: 0.48 },
+          { transform: 'translate(-50%, 0) rotate(1.5deg)', offset: 0.62 },
+          { transform: 'translate(-50%, 0) rotate(0deg)', offset: 0.78 },
+          { transform: 'translate(-50%, -120%) rotate(5deg)' },
+        ],
+        { duration: 1300, easing: 'ease-in-out', fill: 'forwards' },
+      );
+      anim.sign = true;
+      banners.add(anim);
+      return new Promise((resolve) => {
+        const finish = () => {
+          banners.delete(anim);
+          el.remove();
+          resolve();
+        };
+        anim.onfinish = finish;
+        anim.oncancel = finish;
+      });
+    },
+
+    /** 色とりどりの リボンが 画面を ビュンと よこぎる */
+    streamers(count) {
+      const n = count ?? cfg().streamers;
+      if (!n || !cfg().juice) return;
+      const w = globalThis.innerWidth;
+      const h = globalThis.innerHeight;
+      const svg = add(document.createElementNS(SVG_NS, 'svg'));
+      svg.setAttribute('class', 'fx-streamers');
+      svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+      let left = n;
+      for (let i = 0; i < n; i += 1) {
+        // 画面の上から下へ、くねくね まがる線
+        let x = rand(-0.1, 1.1) * w;
+        let y = -40;
+        let d = `M${x.toFixed(1)} ${y}`;
+        const drift = rand(-0.35, 0.35) * w;
+        const steps = 3;
+        for (let k = 1; k <= steps; k += 1) {
+          const nx = x + drift / steps + rand(-0.12, 0.12) * w;
+          const ny = ((h + 80) * k) / steps;
+          const bend = rand(0.25, 0.45) * w * (k % 2 ? 1 : -1);
+          d += ` C${(x + bend).toFixed(1)} ${(y + (ny - y) * 0.33).toFixed(1)} ${(nx + bend).toFixed(1)} ${(y + (ny - y) * 0.66).toFixed(1)} ${nx.toFixed(1)} ${ny.toFixed(1)}`;
+          x = nx;
+          y = ny;
+        }
+        const path = document.createElementNS(SVG_NS, 'path');
+        path.setAttribute('d', d);
+        path.setAttribute('stroke', STREAMER_COLORS[i % STREAMER_COLORS.length]);
+        path.setAttribute('stroke-width', String(Math.round(rand(9, 15))));
+        svg.appendChild(path);
+        const len = path.getTotalLength?.() || h * 1.6;
+        const dash = len * 0.38;
+        path.style.strokeDasharray = `${dash} ${len + dash}`;
+        const anim = path.animate([{ strokeDashoffset: `${dash}px` }, { strokeDashoffset: `${-len}px` }], {
+          duration: rand(850, 1150),
+          delay: i * 55,
+          easing: 'cubic-bezier(.45,.05,.4,1)',
+          fill: 'both',
+        });
+        const end = () => {
+          left -= 1;
+          if (left === 0) svg.remove();
+        };
+        anim.onfinish = end;
+        anim.oncancel = end;
+      }
+    },
+
+    /** 黄色い しょうげきはの わっか */
+    shockwave(x, y, { color = '#ffc21a', size = 1 } = {}) {
+      if (!cfg().juice) return;
+      const el = add(document.createElement('div'));
+      el.className = 'fx-shock';
+      el.style.left = `${x}px`;
+      el.style.top = `${y}px`;
+      el.style.borderColor = color;
+      done(
+        el.animate(
+          [
+            { transform: 'scale(0.3)', opacity: 1, borderWidth: '10px' },
+            { transform: `scale(${5 * size})`, opacity: 0, borderWidth: '2px' },
+          ],
+          { duration: 600, easing: 'cubic-bezier(.1,.7,.3,1)' },
+        ),
+        el,
+      );
+    },
+
+    /** 「+15」「コンボ×1.5」のような ふきだしが ポンと出て うかぶ */
+    scorePop(x, y, text, { variant = 'coin', delay = 0, dx = 0 } = {}) {
+      if (!cfg().juice) {
+        fx.floatText(x, y, text, 'coin-text');
+        return;
+      }
+      const el = add(document.createElement('div'));
+      el.className = `fx-pop fx-pop--${variant}`;
+      el.textContent = text;
+      el.style.left = `${x + dx}px`;
+      el.style.top = `${y}px`;
+      const tilt = rand(-8, 8);
+      done(
+        el.animate(
+          [
+            { transform: `translate(-50%,-50%) scale(0.2) rotate(${tilt}deg)`, opacity: 0 },
+            { transform: `translate(-50%,-50%) scale(1.3) rotate(${-tilt / 2}deg)`, opacity: 1, offset: 0.2 },
+            { transform: `translate(-50%,-50%) scale(1) rotate(0deg)`, opacity: 1, offset: 0.35 },
+            { transform: `translate(-50%,-170%) scale(0.95) rotate(0deg)`, opacity: 0 },
+          ],
+          { duration: 1150, delay, easing: 'ease-out', fill: 'backwards' },
+        ),
+        el,
+      );
+    },
+
+    /** コイン・ハート・星が ふんすいのように とびだして 落ちる */
+    fountain(x, y, count) {
+      const n = count ?? cfg().fountain;
+      if (!n || !cfg().juice) return;
+      const h = globalThis.innerHeight;
+      for (let i = 0; i < n; i += 1) {
+        const el = add(document.createElement('span'));
+        const kind = i % 3;
+        if (kind === 0) {
+          el.className = 'coin fx-coin';
+        } else {
+          el.className = 'fx-particle';
+          el.textContent = kind === 1 ? '♥' : '★';
+          el.style.color = COLORS[i % COLORS.length];
+        }
+        el.style.left = `${x}px`;
+        el.style.top = `${y}px`;
+        const dx = rand(-140, 140);
+        const up = rand(90, 220);
+        const spin = rand(-540, 540);
+        done(
+          el.animate(
+            [
+              { transform: 'translate(-50%,-50%) scale(0.4) rotate(0deg)', opacity: 1 },
+              { transform: `translate(calc(-50% + ${dx * 0.5}px), calc(-50% - ${up}px)) scale(1.15) rotate(${spin / 2}deg)`, opacity: 1, offset: 0.4 },
+              { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${h - y + 60}px)) scale(0.9) rotate(${spin}deg)`, opacity: 0.9 },
+            ],
+            { duration: rand(1100, 1500), delay: i * 22, easing: 'cubic-bezier(.3,.6,.6,1)', fill: 'backwards' },
+          ),
+          el,
+        );
+      }
+    },
+
+    /** なかまや ハートが まん中から ドカンと とびちる */
+    explode(x, y, emojis = ['🎉'], count) {
+      const n = count ?? cfg().explode;
+      if (!n || !cfg().juice) return;
+      for (let i = 0; i < n; i += 1) {
+        const el = add(document.createElement('span'));
+        el.className = 'fx-emoji';
+        el.textContent = emojis[i % emojis.length];
+        el.style.left = `${x}px`;
+        el.style.top = `${y}px`;
+        const angle = (Math.PI * 2 * i) / n + rand(-0.2, 0.2);
+        const dist = rand(120, 260);
+        const dx = Math.cos(angle) * dist;
+        const dy = Math.sin(angle) * dist;
+        const spin = rand(-360, 360);
+        done(
+          el.animate(
+            [
+              { transform: 'translate(-50%,-50%) scale(0.2) rotate(0deg)', opacity: 1 },
+              { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(1.35) rotate(${spin}deg)`, opacity: 1, offset: 0.55 },
+              { transform: `translate(calc(-50% + ${dx * 1.2}px), calc(-50% + ${dy * 1.2 + 120}px)) scale(0.8) rotate(${spin * 1.4}deg)`, opacity: 0 },
+            ],
+            { duration: rand(1100, 1500), delay: i * 12, easing: 'cubic-bezier(.15,.8,.35,1)', fill: 'backwards' },
+          ),
+          el,
+        );
+      }
+    },
+
+    /** 画面の うしろで ひかりの線が まわる（点めつは しない） */
+    sunburst(ms = 1600) {
+      if (!cfg().juice) return;
+      const el = addBack(document.createElement('div'));
+      el.className = 'fx-sunburst';
+      done(
+        el.animate(
+          [
+            { transform: 'rotate(0deg) scale(0.6)', opacity: 0 },
+            { transform: 'rotate(12deg) scale(1)', opacity: 1, offset: 0.25 },
+            { transform: 'rotate(40deg) scale(1.05)', opacity: 1, offset: 0.7 },
+            { transform: 'rotate(55deg) scale(1.1)', opacity: 0 },
+          ],
+          { duration: ms, easing: 'ease-out' },
+        ),
+        el,
+      );
+    },
+
+    /** 画面の うしろを 大きな ふうせんが のぼっていく */
+    balloons(count) {
+      const n = count ?? cfg().balloons;
+      if (!n || !cfg().juice) return;
+      const w = globalThis.innerWidth;
+      const h = globalThis.innerHeight;
+      for (let i = 0; i < n; i += 1) {
+        const el = addBack(document.createElement('div'));
+        el.className = 'fx-balloon';
+        el.style.setProperty('--bc', BALLOON_COLORS[i % BALLOON_COLORS.length]);
+        el.style.left = `${((i + rand(0, 0.8)) / n) * w - 40}px`;
+        const s = rand(0.8, 1.5);
+        const sway = rand(-40, 40);
+        done(
+          el.animate(
+            [
+              { transform: `translate(0, 0) scale(${s}) rotate(${-sway / 4}deg)` },
+              { transform: `translate(${sway}px, ${-(h * 0.6)}px) scale(${s}) rotate(${sway / 4}deg)`, offset: 0.55 },
+              { transform: `translate(${-sway / 2}px, ${-(h + 260)}px) scale(${s}) rotate(${-sway / 6}deg)` },
+            ],
+            { duration: rand(1700, 2400), delay: i * 60, easing: 'cubic-bezier(.3,.2,.6,1)', fill: 'backwards' },
+          ),
+          el,
+        );
+      }
+    },
+
+    /** ぷるんと はずむ（正解の カードなど） */
+    bounce(el) {
+      if (!el || !cfg().juice) return;
+      el.animate(
+        [
+          { transform: 'scale(1)' },
+          { transform: 'scale(1.05, 0.95)', offset: 0.25 },
+          { transform: 'scale(0.97, 1.03)', offset: 0.55 },
+          { transform: 'scale(1)' },
+        ],
+        { duration: 380, easing: 'ease-out' },
+      );
+    },
+
+    /** カードが ななめに かたむきながら とびこんでくる */
+    flyIn(el, { strong = false } = {}) {
+      if (!el) return;
+      if (!cfg().juice) {
+        el.animate([{ opacity: 0, transform: 'translateY(12px)' }, { opacity: 1, transform: 'none' }], { duration: 260, easing: 'ease-out' });
+        return;
+      }
+      const t = strong ? 'translateY(140px) rotate(-12deg) scale(0.6)' : 'translateY(60px) rotate(-5deg) scale(0.85)';
+      el.animate(
+        [
+          { transform: t, opacity: 0 },
+          { transform: 'translateY(-8px) rotate(3deg) scale(1.04)', opacity: 1, offset: 0.6 },
+          { transform: 'translateY(2px) rotate(-1deg) scale(0.99)', offset: 0.8 },
+          { transform: 'none', opacity: 1 },
+        ],
+        { duration: strong ? 700 : 480, easing: 'cubic-bezier(.2,.8,.3,1)' },
+      );
+    },
+
+    /** 筆算の答えの数字が 大きく出て、マスに すいこまれる */
+    digitPop(el, digit) {
+      if (!el || !cfg().juice) return;
+      const c = centerOf(el);
+      const big = add(document.createElement('div'));
+      big.className = 'fx-digit';
+      big.textContent = String(digit);
+      big.style.left = `${c.x}px`;
+      big.style.top = `${c.y}px`;
+      done(
+        big.animate(
+          [
+            { transform: 'translate(-50%,-50%) scale(3.2)', opacity: 0 },
+            { transform: 'translate(-50%,-50%) scale(2.4)', opacity: 1, offset: 0.25 },
+            { transform: 'translate(-50%,-50%) scale(1)', opacity: 0 },
+          ],
+          { duration: 420, easing: 'cubic-bezier(.5,0,.7,1)' },
+        ),
+        big,
+      );
+      fx.shockwave(c.x, c.y, { size: 0.6 });
     },
 
     /** ハンコを「ポン」とおす（el はハンコの要素） */
@@ -296,15 +608,23 @@ export function createFx({ layer, getLevel }) {
       });
     },
 
-    /** なかまがジャンプ */
-    hop(els) {
+    /** なかまがジャンプ（power が大きいほど 高く。3 からは くるっと回る） */
+    hop(els, power = 1) {
       if (getLevel() === 'calm') return;
-      els.forEach((el, i) =>
+      const jump = 18 + Math.min(power, 4) * 7;
+      els.forEach((el, i) => {
+        const tilt = (i % 2 ? 1 : -1) * (6 + power * 3);
+        const spin = power >= 3 && i % 2 === 0 ? 360 : 0;
         el.animate(
-          [{ transform: 'translateY(0)' }, { transform: 'translateY(-18px) rotate(-6deg)' }, { transform: 'translateY(0)' }],
-          { duration: 420, delay: i * 60, easing: 'cubic-bezier(.3,1.6,.5,1)' },
-        ),
-      );
+          [
+            { transform: 'translateY(0) rotate(0deg) scale(1)' },
+            { transform: `translateY(4px) scale(1.15, 0.85)`, offset: 0.15 },
+            { transform: `translateY(-${jump}px) rotate(${tilt + spin / 2}deg) scale(0.95, 1.1)`, offset: 0.5 },
+            { transform: `translateY(0) rotate(${spin}deg) scale(1)` },
+          ],
+          { duration: 460 + power * 40, delay: i * 55, easing: 'cubic-bezier(.3,1.4,.5,1)' },
+        );
+      });
     },
 
     /** 数字をカウントアップ */

@@ -134,7 +134,7 @@ export function createHissan(container, spec, { hintMode = 'onError', onDigit = 
               `<div class="hs-row hs-row--${row}" style="grid-template-columns:${colTemplate}">${cols.map((c) => cellFor(row, c)).join('')}</div>`,
           )
           .join('')}
-        <div class="hs-left" aria-live="polite">${finished ? '' : `あと ${answerExps.length - pos} けた`}</div>
+        <div class="hs-left" aria-live="polite">${finished ? '' : `<span class="${answerExps.length - pos === 1 ? 'last' : ''}">あと ${answerExps.length - pos} けた${answerExps.length - pos === 1 ? '！' : ''}</span>`}</div>
       </div>`;
   }
 

@@ -17,6 +17,9 @@ const PRAISE = ['すごい！', 'やったね！', 'そのちょうし！', 'か
 const COMFORT = ['おしい！ かいせつを見てみよう', 'だいじょうぶ、つぎはできるよ', 'まちがいは のびるチャンス！', 'ノートに入れたから、あとで ふくしゅうしよう'];
 const isEnglish = (s) => /^[\x20-\x7E]+$/.test(s) && /[A-Za-z]/.test(s);
 const LAST_ONE_GOAL = { normal: 'EXステージ', ex1: 'EX 2 かいほう', ex2: 'EX 3 かいほう', ex3: 'マスター' };
+// 正解したときに なかまが見せる 看板
+const SIGN_WORDS = ['せいかい！', 'やったね！', 'すごい！', 'ナイス！', 'ばっちり！', 'さすが！'];
+const multText = (m) => m.toFixed(2).replace(/\.?0+$/, '');
 
 export function mountQuiz(root, ctx) {
   const s = ctx.session;
@@ -117,6 +120,7 @@ export function mountQuiz(root, ctx) {
     const $quiz = root.querySelector('.quiz');
     $quiz.classList.toggle('fever', s.combo >= FEVER_COMBO);
     $quiz.dataset.tier = String(tier);
+    document.body.classList.toggle('fever-on', s.combo >= FEVER_COMBO);
   }
 
   /** いまの問題が ゴールデン問題か */
@@ -246,6 +250,11 @@ export function mountQuiz(root, ctx) {
       sfx.golden();
       if (ctx.effectsLevel() !== 'calm') {
         later(() => fx.banner('ゴールデン問題！', { sub: `せいかいで コイン ×${GOLDEN_MULT}`, variant: 'golden', duration: 650, pass: true }), 100);
+        later(() => {
+          const g = fx.centerOf($card);
+          fx.shockwave(g.x, g.y, { size: 1.4 });
+          fx.streamers(3);
+        }, 150);
       }
     }
     if (isLastChance()) {
@@ -271,6 +280,9 @@ export function mountQuiz(root, ctx) {
               if (el && result === 'ok') {
                 const c = fx.centerOf(el);
                 fx.burst(c.x, c.y, { count: ctx.effectsLevel() === 'calm' ? 0 : 6 });
+                // 答えの数字が 大きく出て マスに すいこまれる
+                fx.digitPop(el, el.textContent.trim());
+                fx.hop($$('.cheer__f', root).slice(0, 2));
               }
             } else {
               sfx.wrong();
@@ -282,7 +294,8 @@ export function mountQuiz(root, ctx) {
         });
       }
     }
-    $card.animate?.([{ opacity: 0, transform: 'translateY(12px)' }, { opacity: 1, transform: 'none' }], { duration: 260, easing: 'ease-out' });
+    // カードが ななめに とびこんでくる（ステージの1問目は 大きく）
+    if ($card.animate) fx.flyIn($card, { strong: s.index === 0 });
   }
 
   // ---------- 答え合わせ ----------
@@ -323,11 +336,19 @@ export function mountQuiz(root, ctx) {
     const c = fx.centerOf($card);
     fx.pop($(`.dots li:nth-child(${s.results.length})`, root));
     if (correct) {
+      // この問題で ステージが パーフェクト（3問以上）
+      const perfectFinish = s.results.length === s.questions.length && s.questions.length >= 3 && s.results.every((r) => r.correct);
       sfx.correct(s.combo);
       fx.ring(c.x, c.y);
       fx.burst(c.x, c.y);
-      fx.floatText(c.x, c.y - 20, `+${coins}`, 'coin-text');
-      fx.hop($$('.cheer__f', root));
+      fx.shockwave(c.x, c.y);
+      fx.bounce($card);
+      // 「+15」「コンボ ×1.5」「ゴールデン ×3」の ふきだしが 次々に ポン
+      const pops = [[`+${coins}`, 'coin']];
+      if (s.combo >= 2) pops.push([`コンボ ×${multText(comboMultiplier(s.combo))}`, 'combo']);
+      if (golden) pops.push([`ゴールデン ×${GOLDEN_MULT}`, 'gold']);
+      pops.forEach(([text, variant], i) => fx.scorePop(c.x, c.y - 20 - i * 40, text, { variant, delay: i * 140, dx: (i % 2 ? 40 : -30) * Math.min(1, pops.length - 1) }));
+      fx.hop($$('.cheer__f', root), 1 + Math.floor(Math.min(s.combo, 9) / 3));
       let started = false;
       fx.coins($card, $coinPill, coins, (i) => {
         sfx.coin(i);
@@ -338,6 +359,19 @@ export function mountQuiz(root, ctx) {
         }
       });
       const tier = comboTier(s.combo);
+      const bigMoment = golden || perfectFinish || (tierUp && tier >= 2);
+      if (!(tierUp && tier >= 2) || perfectFinish) {
+        // なかまが 上から ぶらさがって 看板を見せる（フィーバーの帯と重なるときは パーフェクトのときだけ）
+        const text = golden ? 'ゴールデン！' : perfectFinish ? 'パーフェクト！' : s.combo >= 2 ? `${s.combo}れんぞく！` : SIGN_WORDS[Math.floor(Math.random() * SIGN_WORDS.length)];
+        const variant = golden ? 'gold' : perfectFinish || s.combo >= FEVER_COMBO ? 'rainbow' : '';
+        fx.sign(text, { emoji: friends[0].emoji, variant });
+      }
+      // リボンが ビュン（れんぞく正解・大きな できごと。「にぎやか」では いつも）
+      if (s.combo >= 3 || bigMoment || ctx.effectsLevel() === 'exciting') later(() => fx.streamers(), 120);
+      if (bigMoment) {
+        later(() => fx.fountain(c.x, c.y), 200);
+        if (tierUp && tier >= 2) fx.sunburst(1400);
+      }
       if (tierUp && tier >= 2) {
         // フィーバー！ など：画面をよこぎる帯（下のボタンはそのまま押せる）
         later(() => {
@@ -357,7 +391,6 @@ export function mountQuiz(root, ctx) {
       if (golden) {
         // ゴールデン問題に せいかい！ 大当たりの演出
         later(() => sfx.jackpot(), 150);
-        later(() => fx.floatText(c.x, c.y - 90, 'ゴールデン！', 'golden-text'), 280);
         fx.burst(c.x, c.y);
         if (ctx.effectsLevel() !== 'calm') fx.confetti(700);
         if (!tierUp) say(`ゴールデン せいかい！ コイン${GOLDEN_MULT}ばい！`);
@@ -646,6 +679,10 @@ export function mountQuiz(root, ctx) {
     later(() => sfx.ex(), 300);
     const info = STAGE_INFO[s.stageKind];
     root.querySelector('.quiz').classList.add('intro');
+    // うしろで ひかりの線が まわり、ふうせんが のぼって、リボンが とぶ
+    fx.sunburst(1900);
+    fx.balloons();
+    later(() => fx.streamers(4), 200);
     fx.banner(info.label, { sub: `EXTRA STAGE・コイン ×${info.mult}`, variant: 'ex', duration: 900 }).then(() => {
       if (mounted) showQuestion();
     });
@@ -660,6 +697,7 @@ export function mountQuiz(root, ctx) {
     document.removeEventListener('keydown', onKey);
     timers.forEach(clearTimeout);
     fx.clearBanners();
+    document.body.classList.remove('fever-on');
     speech.cancel();
     if (ctx.debug) delete globalThis.__mqQuiz;
   };

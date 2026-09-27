@@ -196,6 +196,8 @@ export function mountHome(root, ctx) {
     sfx.chest();
     const c = fx.centerOf(el);
     fx.burst(c.x, c.y);
+    fx.shockwave(c.x, c.y);
+    fx.fountain(c.x, c.y, 8);
     let started = false;
     fx.coins(el, hud, res.coins + res.bonus, (k) => {
       sfx.coin(k);
@@ -216,6 +218,9 @@ export function mountHome(root, ctx) {
         if (ctx.effectsLevel() !== 'calm') fx.banner('ミッション コンプリート！', { sub: `ボーナス ＋${res.bonus}`, variant: 'gold', duration: 1100, pass: true });
         else toast(`🎉 ミッション コンプリート！ ボーナス ＋${res.bonus}`);
         fx.confetti(1600);
+        fx.streamers();
+        const m = fx.centerOf(card);
+        fx.explode(m.x, m.y, ['🎯', '🎉', '⭐', '💖']);
       }, 450);
     }
   }
