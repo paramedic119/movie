@@ -123,6 +123,29 @@ export const sfx = {
     [523, 659, 784, 1047, 784, 1047, 1319].forEach((f, i) => tone(f, i * 0.09, 0.18, { type: 'square', vol: 0.18 }));
     tone(1568, 0.63, 0.55, { type: 'triangle', vol: 0.5 });
   },
+  /** ゴールデン問題が出た！（キラキラと上がる音） */
+  golden() {
+    [1319, 1568, 1976, 2637].forEach((f, i) => tone(f, i * 0.06, 0.18, { type: 'sine', vol: 0.35 }));
+    tone(3136, 0.26, 0.4, { type: 'triangle', vol: 0.25 });
+  },
+  /** ゴールデン問題に せいかい！（大当たり） */
+  jackpot() {
+    [523, 659, 784, 1047, 1319, 1568, 2093].forEach((f, i) => tone(f, i * 0.05, 0.16, { type: 'square', vol: 0.15 }));
+    [1047, 1319, 1568].forEach((f) => tone(f, 0.4, 0.6, { type: 'triangle', vol: 0.3 }));
+    for (let i = 0; i < 6; i += 1) tone(2637 + (i % 2) * 400, 0.45 + i * 0.07, 0.08, { type: 'sine', vol: 0.18 });
+  },
+  /** たからばこの ランクアップ（i が大きいほど高い音） */
+  rankUp(i = 0) {
+    const f = [784, 988, 1175, 1568][i] ?? 1568;
+    tone(f, 0, 0.1, { type: 'square', vol: 0.18 });
+    tone(f * 1.26, 0.07, 0.1, { type: 'square', vol: 0.18 });
+    tone(f * 1.5, 0.14, 0.28, { type: 'triangle', vol: 0.4 });
+  },
+  /** ミッション クリア */
+  mission() {
+    [880, 1109, 1319].forEach((f, i) => tone(f, i * 0.08, 0.14, { type: 'triangle', vol: 0.45 }));
+    tone(1760, 0.24, 0.3, { type: 'sine', vol: 0.3 });
+  },
   buy() {
     tone(988, 0, 0.1, { type: 'square', vol: 0.2 });
     tone(1319, 0.08, 0.25, { type: 'square', vol: 0.2 });

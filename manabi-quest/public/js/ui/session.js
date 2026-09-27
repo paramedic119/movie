@@ -2,8 +2,12 @@
 
 import { buildStage, buildMixStage, buildReviewStage, buildDailyStage, prepareForPlay } from '../game/stage.js';
 import { dueEntries } from '../game/review.js';
+import { GOLDEN_RATE, pickGoldenIndex } from '../game/rewards.js';
+import { ensureMissions } from '../game/missions.js';
+import { dateKey } from '../game/state.js';
 import { toast } from './modal.js';
 import { isGrade4 } from '../data/subjects.js';
+import { FURIKAERI_FOR, isStruggling } from '../data/furikaeri.js';
 
 /** この端末で出せる問題か（読み上げ専用の問題は、読み上げが使えるときだけ） */
 const canUseOn = (ctx) => (q) => !q.listenOnly || ctx.speech.available();
@@ -17,6 +21,9 @@ function begin(ctx, { subjectId, unitId = null, homeUnitId = unitId, unitTitle, 
     ctx.go('#/rest');
     return false;
   }
+  refreshMissions(ctx);
+  // ゴールデン問題（おうちの人の設定でオフにできる。テストでは ctx.goldenRate で決められる）
+  const goldenRate = ctx.store.state.settings.golden ? (ctx.goldenRate ?? GOLDEN_RATE) : 0;
   ctx.session = {
     subjectId,
     unitId,
@@ -30,8 +37,10 @@ function begin(ctx, { subjectId, unitId = null, homeUnitId = unitId, unitTitle, 
     maxCombo: prev?.maxCombo ?? 0,
     stageCoins: 0,
     chainCoins: prev?.chainCoins ?? 0,
+    golden: pickGoldenIndex(questions.length, stageKind, ctx.rng, goldenRate),
     used: new Set([...(prev?.used ?? []), ...questions.map((q) => q.id)]),
     mastered: [],
+    missionsDone: [],
     startedAt: Date.now(),
     startEarned: ctx.store.state.totalEarned, // けっか画面の「しょうごうゲージ」用
   };
@@ -60,6 +69,43 @@ export function startMix(ctx, subjectId) {
   const units = (ctx.subjects[subjectId]?.units ?? []).filter(isGrade4);
   const questions = buildMixStage({ units, rng: ctx.rng, qstats: ctx.store.state.qstats, canUse: canUseOn(ctx) });
   return begin(ctx, { subjectId, unitTitle: 'ミックスチャレンジ', stageKind: 'mix', questions });
+}
+
+/** ミッションを決めるための情報（学習のためになるミッションを多めに出すため） */
+export function missionInfo(ctx) {
+  const st = ctx.store.state;
+  const subjectIds = ctx.SUBJECTS.map((s) => s.id).filter((id) => (ctx.subjects[id]?.units ?? []).some(isGrade4));
+  // にがてな教科：10問以上といて、正答率が7わりより低い教科のうち いちばん低い教科
+  let weakSubject = null;
+  let worst = 0.7;
+  for (const id of subjectIds) {
+    const r = st.subjects[id];
+    if (r && r.n >= 10 && r.c / r.n < worst) {
+      worst = r.c / r.n;
+      weakSubject = id;
+    }
+  }
+  const furikaeri = subjectIds.some((id) => ctx.subjects[id].units.some((u) => isGrade4(u) && FURIKAERI_FOR[u.id]?.length && isStruggling(st, u.id)));
+  return {
+    dueCount: reviewableEntries(ctx).length,
+    furikaeri,
+    golden: st.settings.golden,
+    subjectIds,
+    weakSubject,
+    dailyDone: st.daily.date === dateKey(ctx.now()) && st.daily.cleared,
+  };
+}
+
+/** 日づけが変わっていたら、きょうのミッションを作る。自動で うけとったコインを返す */
+export function refreshMissions(ctx) {
+  const st = ctx.store.state;
+  if (st.missions.date === dateKey(ctx.now()) && st.missions.list.length) return 0;
+  const info = missionInfo(ctx);
+  let carried = 0;
+  ctx.store.update((state) => {
+    carried = ensureMissions(state, ctx.now(), info).carried;
+  });
+  return carried;
 }
 
 /** きょう ふくしゅうできる問題（この端末で出せるものだけ） */

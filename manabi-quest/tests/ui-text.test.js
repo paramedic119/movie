@@ -15,6 +15,7 @@ const FILES = [
     .map((f) => path.join('ui', f)),
   'game/shop.js',
   'game/rewards.js',
+  'game/missions.js',
   'main.js',
   path.join('..', 'index.html'),
 ];

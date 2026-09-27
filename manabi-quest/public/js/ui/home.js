@@ -1,11 +1,12 @@
 // ホーム画面
 
-import { esc, onAct, minutesText } from './dom.js';
+import { $, esc, onAct, minutesText } from './dom.js';
 import { titleFor } from '../game/rewards.js';
-import { friendById } from '../game/shop.js';
+import { friendById, nextFriendGoal } from '../game/shop.js';
 import { remainingSeconds, dayRecord, unitMastery, dateKey } from '../game/state.js';
-import { startReview, startDaily, reviewableEntries } from './session.js';
-import { openModal } from './modal.js';
+import { MISSION_KINDS, ALL_CLEAR_BONUS, STAMP_GOALS, missionText, claimMission, weekStamps, weekStartKey, nextStampGoal } from '../game/missions.js';
+import { startReview, startDaily, reviewableEntries, refreshMissions } from './session.js';
+import { openModal, toast } from './modal.js';
 import { isGrade4 } from '../data/subjects.js';
 import { withCommas } from '../lib/numfmt.js';
 
@@ -19,11 +20,74 @@ function showGuide(ctx) {
       <li><b>5問 全問せいかい</b>で <b>EXステージ</b>（追加テスト）が出てくる！</li>
       <li>まちがえた問題は <b>📒ノート</b>で ふくしゅうしよう。</li>
       <li>コインで <b>🐾なかま</b>を ふやそう。</li>
+      <li>毎日の <b>🎯ミッション</b>や、ときどき出る <b>✨ゴールデン問題</b>で コインが もっと もらえるよ！</li>
     </ol>
     <p class="small muted">${limit ? `1日に あそべる時間は ${limit}分だよ。` : ''}おうちの人は「👪おうちの人」から 時間や音の せっていが できます。</p>`,
     actions: [{ label: 'はじめる！', value: true, variant: 'primary' }],
     className: 'modal--guide',
   });
+}
+
+/** きょうのミッション（クリアしたら「うけとる」でコイン） */
+function missionsHtml(ctx) {
+  const st = ctx.store.state;
+  const list = st.missions.list;
+  const subjectName = (id) => ctx.subjectMeta(id)?.name ?? id;
+  const rows = list
+    .map((m, i) => {
+      const icon = (m.kind === 'subject' && ctx.subjectMeta(m.subject)?.emoji) || MISSION_KINDS[m.kind]?.icon || '🎯';
+      const side = m.claimed
+        ? '<span class="mission__ok" role="img" aria-label="うけとりずみ">✅</span>'
+        : m.done
+          ? `<button class="btn btn--small btn--claim" data-act="claim" data-i="${i}" aria-label="${m.coins}コイン うけとる"><b>うけとる</b><small><span class="coin" aria-hidden="true"></span>${m.coins}</small></button>`
+          : `<span class="mission__reward"><span class="coin" aria-hidden="true"></span>${m.coins}</span>`;
+      return `<li class="mission ${m.done ? 'done' : ''} ${m.claimed ? 'claimed' : ''}">
+        <span class="mission__icon" aria-hidden="true">${icon}</span>
+        <span class="mission__body">
+          <span class="mission__text">${esc(missionText(m, subjectName))}</span>
+          <span class="mission__bar"><span class="meter meter--mission" aria-hidden="true"><i style="width:${Math.round((m.n / m.goal) * 100)}%"></i></span><small>${m.n}/${m.goal}</small></span>
+        </span>
+        ${side}
+      </li>`;
+    })
+    .join('');
+  return `<div class="missions__head"><h2>🎯 きょうの ミッション</h2><span class="missions__count">${list.filter((m) => m.done).length}/${list.length}</span></div>
+    <ul class="missions__list">${rows}</ul>
+    <p class="missions__foot">${
+      st.missions.bonus
+        ? '🎉 ミッション コンプリート！ また あしたね'
+        : `3つ ぜんぶで ボーナス <span class="coin" aria-hidden="true"></span>${ALL_CLEAR_BONUS}`
+    } <small>（ステージは ★1つ以上で クリア）</small></p>`;
+}
+
+/** 1週間の がんばりスタンプ（ステージをクリアした日に1つ） */
+function stampsHtml(ctx) {
+  const st = ctx.store.state;
+  const now = ctx.now();
+  const days = weekStamps(st, now);
+  const count = days.filter((d) => d.stamped).length;
+  const next = nextStampGoal(count);
+  const got = st.week.start === weekStartKey(now) ? st.week.got : [];
+  const partner = friendById(st.partner);
+  return `<div class="stampcard__head"><b>📅 こんしゅうの がんばりスタンプ</b><small>${next ? `あと ${next.days - count}日で ボーナス` : 'ぜんぶ あつめた！ すごい！'}</small></div>
+    <ol class="stampcard__days" aria-label="こんしゅうの スタンプ ${count}こ">${days
+      .map(
+        (d) => `<li class="${d.stamped ? 'on' : ''} ${d.today ? 'is-today' : ''} ${d.future ? 'is-future' : ''}" aria-label="${d.label} ${d.stamped ? 'スタンプあり' : 'まだ'}">
+          <span class="stampcard__label" aria-hidden="true">${d.today ? 'きょう' : d.label}</span>
+          <span class="stampcard__mark" aria-hidden="true">${d.stamped ? partner.emoji : ''}</span>
+        </li>`,
+      )
+      .join('')}</ol>
+    <p class="stampcard__goals">${STAMP_GOALS.map((g) => `<span class="${got.includes(g.days) ? 'got' : ''}">${got.includes(g.days) ? '✅' : '🎁'} ${g.days}日 <span class="coin" aria-hidden="true"></span>${g.coins}</span>`).join('')}</p>`;
+}
+
+/** つぎの なかままで あと何コイン */
+function friendGoalHtml(st) {
+  const nf = nextFriendGoal(st);
+  if (!nf) return '';
+  return `<a class="hero__friend ${nf.affordable ? 'ready' : ''}" href="#/friends"><span aria-hidden="true">${nf.friend.emoji}</span> ${
+    nf.affordable ? 'なかまに できるよ！ ▶' : `あと${withCommas(nf.need)}コインで なかまに！`
+  }</a>`;
 }
 
 const GREETINGS = [
@@ -35,6 +99,8 @@ const GREETINGS = [
 ];
 
 export function mountHome(root, ctx) {
+  // 日づけが変わっていたら きょうのミッションを作る（前の日に うけとりわすれたコインは 自動で うけとる）
+  const carried = refreshMissions(ctx);
   const st = ctx.store.state;
   const now = ctx.now();
   const partner = friendById(st.partner);
@@ -70,6 +136,7 @@ export function mountHome(root, ctx) {
           <div class="hero__title"><span aria-hidden="true">${title.current.emoji}</span> ${esc(title.current.name)}</div>
           <div class="meter meter--gold" aria-hidden="true"><i style="width:${Math.round(title.progress * 100)}%"></i></div>
           <div class="hero__next">${title.next ? `つぎの しょうごう「${esc(title.next.name)}」まで あと ${withCommas(title.next.min - st.totalEarned)} コイン` : 'さいこうの しょうごうだ！'}</div>
+          <div class="hero__friend-slot">${friendGoalHtml(st)}</div>
         </div>
       </div>
 
@@ -89,8 +156,12 @@ export function mountHome(root, ctx) {
         <span class="daily-cta__go" aria-hidden="true">▶</span>
       </button>
 
+      <div class="card missions" id="missions">${missionsHtml(ctx)}</div>
+
       <h2 class="section-title">きょうかを えらぼう</h2>
       <div class="subject-grid">${subjectCards}</div>
+
+      <div class="card stampcard">${stampsHtml(ctx)}</div>
 
       <div class="card today">
         <div class="today__row">
@@ -105,6 +176,44 @@ export function mountHome(root, ctx) {
       </div>
     </section>`;
 
+  const timers = [];
+  const later = (fn, ms) => timers.push(setTimeout(fn, ms));
+  if (carried) later(() => toast(`きのうの ミッションの コイン ＋${withCommas(carried)} を うけとったよ`, 3200), 400);
+
+  /** ミッションのコインを うけとる（コインが上のコイン表示へ飛んでいく） */
+  function claim(el) {
+    const before = ctx.store.state.coins;
+    let res = { coins: 0, bonus: 0 };
+    ctx.store.update((state) => {
+      res = claimMission(state, Number(el.dataset.i), ctx.now());
+    });
+    if (!res.coins) return;
+    const { fx, sfx } = ctx;
+    const hud = document.getElementById('hud-coins');
+    const hudCount = document.getElementById('hud-coin-count');
+    sfx.chest();
+    const c = fx.centerOf(el);
+    fx.burst(c.x, c.y);
+    let started = false;
+    fx.coins(el, hud, res.coins + res.bonus, (k) => {
+      sfx.coin(k);
+      if (!started) {
+        started = true;
+        fx.countUp(hudCount, before, ctx.store.state.coins, 600);
+        fx.pop(hud);
+      }
+    });
+    $('#missions', root).innerHTML = missionsHtml(ctx);
+    $('.hero__friend-slot', root).innerHTML = friendGoalHtml(ctx.store.state);
+    if (res.bonus) {
+      later(() => {
+        sfx.levelUp();
+        if (ctx.effectsLevel() !== 'calm') fx.banner('ミッション コンプリート！', { sub: `ボーナス ＋${res.bonus}`, variant: 'gold', duration: 1100, pass: true });
+        fx.confetti(1600);
+      }, 450);
+    }
+  }
+
   let guideTimer = 0;
   if (!st.seenGuide) {
     ctx.store.update((state) => {
@@ -117,6 +226,7 @@ export function mountHome(root, ctx) {
     subject: (el) => ctx.go(`#/subject/${el.dataset.id}`),
     review: () => startReview(ctx),
     daily: () => startDaily(ctx),
+    claim,
     partner: (el) => {
       ctx.sfx.tap();
       ctx.fx.hop([el]);
@@ -127,5 +237,7 @@ export function mountHome(root, ctx) {
   return () => {
     offAct();
     clearTimeout(guideTimer);
+    timers.forEach(clearTimeout);
+    ctx.fx.clearBanners();
   };
 }

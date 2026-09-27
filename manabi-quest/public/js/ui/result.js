@@ -2,7 +2,9 @@
 
 import { $, $$, esc, md, onAct, starsHtml } from './dom.js';
 import { openModal } from './modal.js';
-import { STAGE_INFO, titleFor } from '../game/rewards.js';
+import { STAGE_INFO, titleFor, CHEST_RANKS } from '../game/rewards.js';
+import { nextStampGoal } from '../game/missions.js';
+import { friendById, nextFriendGoal } from '../game/shop.js';
 import { withCommas } from '../lib/numfmt.js';
 import { startUnitStage, startMix, startReview, startRevenge, startDaily } from './session.js';
 import { furikaeriFor } from '../data/furikaeri.js';
@@ -29,15 +31,24 @@ function stampHtml(stars) {
   return '<div class="stamp stamp--try" aria-hidden="true"><span>がんばり</span><span>ました</span></div>';
 }
 
+// たからばこの色は ランク（chest--r1〜r4）ごとに CSS でかえる
 const CHEST_SVG = `<svg class="chest__svg" viewBox="0 0 64 56" aria-hidden="true">
-  <rect x="6" y="24" width="52" height="27" rx="4" fill="#b8651f" stroke="#2b2a4c" stroke-width="3"/>
-  <rect x="28" y="24" width="8" height="27" fill="#ffc21a" stroke="#2b2a4c" stroke-width="2"/>
+  <defs>
+    <linearGradient id="chest-rainbow" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff5d8f"/><stop offset="0.3" stop-color="#ffc300"/><stop offset="0.55" stop-color="#1fb574"/><stop offset="0.8" stop-color="#2f8dff"/><stop offset="1" stop-color="#8a63ff"/>
+    </linearGradient>
+  </defs>
+  <rect class="chest__body" x="6" y="24" width="52" height="27" rx="4" stroke="#2b2a4c" stroke-width="3"/>
+  <rect class="chest__band" x="28" y="24" width="8" height="27" stroke="#2b2a4c" stroke-width="2"/>
   <rect x="26.5" y="28" width="11" height="9" rx="2" fill="#fff4c4" stroke="#2b2a4c" stroke-width="2"/>
   <g class="chest__lid">
-    <path d="M6 24 Q6 7 32 7 Q58 7 58 24 Z" fill="#d9822f" stroke="#2b2a4c" stroke-width="3" stroke-linejoin="round"/>
-    <rect x="28" y="7.5" width="8" height="16.5" fill="#ffc21a" stroke="#2b2a4c" stroke-width="2"/>
+    <path class="chest__top" d="M6 24 Q6 7 32 7 Q58 7 58 24 Z" stroke="#2b2a4c" stroke-width="3" stroke-linejoin="round"/>
+    <rect class="chest__band" x="28" y="7.5" width="8" height="16.5" stroke="#2b2a4c" stroke-width="2"/>
   </g>
 </svg>`;
+
+// たからばこの ランクアップの間かく（ミリ秒）
+const RANK_STEP_MS = 520;
 
 function gaugeInner(t, earned) {
   const next = t.next ? `つぎの しょうごうまで あと ${withCommas(t.next.min - earned)}` : 'さいこうの しょうごう！';
@@ -67,8 +78,23 @@ export function mountResult(root, ctx) {
   const struggled = !timeUp && !r.stageKind.startsWith('ex') && r.stageKind !== 'revenge' && (wrong.length >= 2 || r.stars <= 1);
   const furikaeri = struggled ? furikaeriFor([...new Set(wrong.map((x) => x.q.unit))], ctx.unitById).slice(0, 2) : [];
   const calm = ctx.effectsLevel() === 'calm';
-  // 演出のタイミング（ミリ秒）：★ → ハンコ → たからばこ → しょうごうゲージ → EXパネル
-  const T = calm ? { star: 0, stamp: 150, chest: 300, gauge: 450, ex: 0 } : { star: 250, stamp: 950, chest: 1450, gauge: 1900, ex: 2500 };
+  const treasure = r.chest ?? { rank: 0, coins: 0, steps: [] };
+  // たからばこは 銅から出てきて、ランクが1つずつ上がる（おだやかでは さいしょから そのランク）
+  const rankUps = calm ? 0 : Math.max(0, treasure.steps.length - 1);
+  const firstRank = calm ? treasure.rank : (treasure.steps[0]?.rank ?? treasure.rank);
+  // 演出のタイミング（ミリ秒）：★ → ハンコ → たからばこ（ランクアップ）→ しょうごうゲージ → EXパネル
+  const T = calm ? { star: 0, stamp: 150, chest: 300, ready: 300, gauge: 450, ex: 0 } : { star: 250, stamp: 950, chest: 1450 };
+  if (!calm) {
+    T.ready = T.chest + rankUps * RANK_STEP_MS;
+    T.gauge = Math.max(1900, T.ready + 450);
+    T.ex = T.gauge + 600;
+  }
+  const nearMiss = !perfect && !timeUp && r.total >= 3 && r.correct === r.total - 1 && r.stageKind !== 'revenge';
+  const partner = friendById(ctx.store.state.partner);
+  const stamp = r.stamp?.newStamp ? r.stamp : null;
+  const stampNext = stamp ? nextStampGoal(stamp.count) : null;
+  const missionsDone = r.missionsDone ?? [];
+  const nextFriend = timeUp ? null : nextFriendGoal(ctx.store.state);
   const earnedAfter = r.earnedAfter ?? ctx.store.state.totalEarned;
   const earnedBefore = Math.min(r.earnedBefore ?? earnedAfter, earnedAfter);
   const gFrom = titleFor(earnedBefore);
@@ -87,16 +113,18 @@ export function mountResult(root, ctx) {
         <div class="result-money">
           <div class="result-coins"><span class="coin big" aria-hidden="true"></span>＋<b id="res-coins">0</b></div>
           ${
-            r.bonus
-              ? `<button type="button" class="chest" data-act="chest" disabled aria-label="ボーナスの たからばこを あける">
-                  <span class="chest__rays" aria-hidden="true"></span>${CHEST_SVG}<span class="chest__label">ボーナス</span>
+            treasure.rank
+              ? `<button type="button" class="chest chest--r${firstRank}" data-act="chest" disabled aria-label="ボーナスの たからばこを あける">
+                  <span class="chest__rays" aria-hidden="true"></span>${CHEST_SVG}<span class="chest__label">${md(CHEST_RANKS[firstRank].name)}</span>
                 </button>`
               : ''
           }
         </div>
         <div class="result-extra">
           ${r.maxCombo >= 2 ? `<span class="chip">🔥 さいだい ${r.maxCombo} れんぞく</span>` : ''}
+          ${r.goldenHit ? '<span class="chip chip--golden">✨ ゴールデン せいかい！</span>' : ''}
           ${r.newStars ? '<span class="chip chip--new">★ きろくこうしん！</span>' : ''}
+          ${nearMiss ? '<span class="chip chip--near">おしい！ あと1問で パーフェクト</span>' : ''}
         </div>
         <div class="gauge">
           ${gaugeInner(gFrom, earnedBefore)}
@@ -121,6 +149,39 @@ export function mountResult(root, ctx) {
       ${r.newFriends
         .map((f) => `<div class="card notice new-friend"><span class="big-emoji">${f.emoji}</span> ひみつのなかま「${esc(f.name)}」が なかまになった！</div>`)
         .join('')}
+      ${
+        stamp
+          ? `<div class="card notice stamp-notice">
+              <span class="stamp-notice__mark" aria-hidden="true">${partner.emoji}</span>
+              <div class="stamp-notice__body">
+                <b>がんばりスタンプ ゲット！</b>
+                <small>こんしゅう ${stamp.count}日目</small>
+                ${stampNext ? `<small>あと ${stampNext.days - stamp.count}日で ボーナス！</small>` : ''}
+                ${stamp.rewards.map((g) => `<span class="stamp-notice__reward">🎁 ${g.days}日 たっせい！ <span class="coin" aria-hidden="true"></span>＋${withCommas(g.coins)}</span>`).join('')}
+              </div>
+            </div>`
+          : ''
+      }
+      ${
+        missionsDone.length
+          ? `<div class="card notice mission-notice">
+              <span class="mission-notice__text">🎯 ミッション クリア！ <small>${missionsDone.length}こ</small></span>
+              ${timeUp ? '' : '<button class="btn btn--small btn--claim" data-act="home">ホームで うけとる ▶</button>'}
+            </div>`
+          : ''
+      }
+      ${
+        nextFriend
+          ? `<a class="card next-friend ${nextFriend.affordable ? 'ready' : ''}" href="#/friends">
+              <span class="next-friend__emoji" aria-hidden="true">${nextFriend.friend.emoji}</span>
+              <span class="next-friend__body">
+                <b>${nextFriend.affordable ? 'なかまに できるよ！' : `あと <span class="coin" aria-hidden="true"></span>${withCommas(nextFriend.need)} で なかまに できる！`}</b>
+                <span class="meter meter--gold" aria-hidden="true"><i style="width:${Math.round(nextFriend.progress * 100)}%"></i></span>
+              </span>
+              <span class="next-friend__go" aria-hidden="true">▶</span>
+            </a>`
+          : ''
+      }
 
       ${
         wrong.length
@@ -167,7 +228,7 @@ export function mountResult(root, ctx) {
               <button class="btn btn--primary btn--big" data-act="rest">おわる</button>
             </div>`
           : `<div class="btn-row">
-              <button class="btn btn--plain" data-act="retry">🔄 もういちど</button>
+              <button class="btn ${nearMiss ? 'btn--primary btn--near' : 'btn--plain'}" data-act="retry">🔄 もういちど</button>
               <button class="btn btn--plain" data-act="back">${homeUnit ? '📚 たんげんをえらぶ' : '🏠 ホーム'}</button>
             </div>`
       }
@@ -210,6 +271,7 @@ export function mountResult(root, ctx) {
     chest.classList.remove('ready');
     chest.classList.add('open');
     $('.chest__label', chest).textContent = `＋${withCommas(r.bonus)}`;
+    chest.setAttribute('aria-label', `ボーナス ${r.bonus}コイン`);
     sfx.chest();
     const c = fx.centerOf(chest);
     fx.burst(c.x, c.y);
@@ -224,13 +286,34 @@ export function mountResult(root, ctx) {
       }
     });
   }
-  if (r.bonus) {
+  // ランクアップ！（銅 → 銀 → 金 → にじ）
+  function rankUp(i) {
+    const el = $('.chest', root);
+    const step = treasure.steps[i];
+    if (!el || !step || chestOpen || !mounted) return;
+    el.className = el.className.replace(/chest--r\d/, `chest--r${step.rank}`);
+    $('.chest__label', el).innerHTML = md(CHEST_RANKS[step.rank].name);
+    sfx.rankUp(i - 1);
+    fx.pop(el);
+    const c = fx.centerOf(el);
+    fx.burst(c.x, c.y, { count: 10 });
+    // 文字が画面からはみ出さないように、よこは画面のまん中に出す
+    fx.floatText(globalThis.innerWidth / 2, c.y - 50, `${step.label} ランクアップ！`, 'rank-text');
+  }
+  if (treasure.rank) {
     later(() => {
-      const chest = $('.chest', root);
-      chest.disabled = false;
-      chest.classList.add('ready');
+      const el = $('.chest', root);
+      el.classList.add('shown');
+      fx.pop(el);
     }, T.chest);
-    later(openChest, T.chest + (calm ? 0 : 1300));
+    for (let i = 1; i <= rankUps; i += 1) later(() => rankUp(i), T.chest + i * RANK_STEP_MS);
+    later(() => {
+      const el = $('.chest', root);
+      if (chestOpen) return;
+      el.disabled = false;
+      el.classList.add('ready');
+    }, T.ready);
+    later(openChest, T.ready + (calm ? 0 : 1300));
   }
 
   // しょうごうゲージがのびる（しょうごうが上がったら おいわい）
@@ -262,6 +345,14 @@ export function mountResult(root, ctx) {
     };
   }
   later(fillGauge, T.gauge);
+
+  // がんばりスタンプを「ポン」
+  if (stamp) {
+    later(() => {
+      fx.stamp($('.stamp-notice__mark', root));
+      sfx.stamp();
+    }, T.gauge + 350);
+  }
 
   if (ex) {
     later(() => sfx.ex(), T.ex + 150);
@@ -298,6 +389,7 @@ export function mountResult(root, ctx) {
     retry,
     back: () => ctx.go(homeUnit ? `#/subject/${homeUnit.subject}` : r.stageKind === 'review' ? '#/note' : '#/'),
     rest: () => ctx.go('#/rest'),
+    home: () => ctx.go('#/'),
   });
   return () => {
     mounted = false;

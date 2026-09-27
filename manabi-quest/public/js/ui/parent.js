@@ -262,6 +262,7 @@ export function mountParent(root, ctx) {
             </div>
             <p class="small muted">「おだやか」はコインが飛ぶ・紙ふぶきなどの動きを止め、刺激をおさえます。</p>
           </fieldset>
+          <label class="setting setting--row"><span>ゴールデン問題<small class="setting__note">ときどき出る、正解するとコインが3倍になる問題</small></span><input type="checkbox" class="toggle" data-setting="golden" ${set.golden ? 'checked' : ''}></label>
           <label class="setting setting--row"><span>効果音</span><input type="checkbox" class="toggle" data-setting="sound" ${set.sound ? 'checked' : ''}></label>
           <label class="setting setting--row"><span>英語の読み上げ</span><input type="checkbox" class="toggle" data-setting="voice" ${set.voice ? 'checked' : ''}></label>
           <div class="setting setting--row">
@@ -279,6 +280,9 @@ export function mountParent(root, ctx) {
           <ul class="small">
             <li>正解するとコインが増え、連続正解（コンボ）で増え方が大きくなります。まちがえてもコインは減りません。</li>
             <li>5問すべて正解すると「EXステージ（追加テスト）」に進めます。EXは難しめの問題で、最大3段階です。</li>
+            <li>ステージの終わりの「たからばこ」は、成績（★の数）で銅・銀・金、ゴールデン問題に正解すると「にじ」に上がります。中身は成績で決まり、運では変わりません。</li>
+            <li>「ゴールデン問題」はランダムに出ますが、コインが増えるのは正解したときだけです。コインを使うくじ引きではありません（上の設定でオフにできます）。</li>
+            <li>毎日の「ミッション」（3つ）と、1週間の「がんばりスタンプ」で、毎日少しずつ続ける目標をつくっています。ミッションには、まちがいノートの復習や、正答率の低い教科・下の学年のふりかえりが多めに出ます。休んでも減るものはありません。</li>
             <li>まちがえた問題には必ず解説を表示し、「まちがいノート」で間隔をあけて復習させます。</li>
             <li>コインで買える「なかま」は値段が決まっており、くじ引き（ガチャ）のような運まかせの仕組みはありません。</li>
             <li>1日の時間の上限・休けいのお知らせ・演出の強さを、このページで調整できます。</li>

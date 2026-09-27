@@ -60,6 +60,8 @@ async function boot() {
     now: () => Date.now(),
     session: null,
     lastResult: null,
+    // ゴールデン問題の出やすさ（null なら ふつう。テストで 0 や 1 にする）
+    goldenRate: null,
     sfx,
     speech,
     subjectMeta: (id) => subjectById(id) ?? MODE_META[id],

@@ -28,12 +28,28 @@ export function comboMultiplier(combo) {
   return Math.min(3, 1 + 0.25 * Math.max(0, combo - 1));
 }
 
+/** ゴールデン問題：正解すると コインが この倍率 */
+export const GOLDEN_MULT = 3;
+/** 1問あたり ゴールデン問題になる確率のめやす（1ステージに1問まで。5問のステージなら 約半分で出る） */
+export const GOLDEN_RATE = 0.12;
+
 /** 1問正解したときのコイン */
-export function coinsForAnswer({ stageKind, combo, usedHint = false }) {
+export function coinsForAnswer({ stageKind, combo, usedHint = false, golden = false }) {
   const mult = STAGE_INFO[stageKind]?.mult ?? 1;
   let coins = BASE_COIN * mult * comboMultiplier(combo);
+  if (golden) coins *= GOLDEN_MULT;
   if (usedHint) coins *= 0.5;
   return Math.max(1, Math.round(coins));
+}
+
+/**
+ * ステージの中で ゴールデン問題にする番号（なければ -1）。
+ * どの問題が ゴールデンになるかは、出てくるまで ひみつ。リベンジ（その場のやり直し）には出さない。
+ */
+export function pickGoldenIndex(count, stageKind, rng, rate = GOLDEN_RATE) {
+  if (!(rate > 0) || count <= 0 || stageKind === 'revenge') return -1;
+  const perStage = 1 - (1 - Math.min(1, rate)) ** count;
+  return rng.chance(perStage) ? rng.int(0, count - 1) : -1;
 }
 
 /** コンボの段階（演出だけに使う。コインの計算は comboMultiplier） */
@@ -57,11 +73,35 @@ export function comboTier(combo) {
   return tier;
 }
 
-/** ステージの終わりにもらえるボーナス */
-export function stageBonus(stageKind, correct, total) {
-  const perfect = total > 0 && correct === total;
-  if (!perfect) return 0;
-  return { normal: 30, ex1: 60, ex2: 120, ex3: 300, mix: 40, daily: 50, review: 30, revenge: 0 }[stageKind] ?? 0;
+/**
+ * ステージの終わりの たからばこ。★の数でランクが決まり、ゴールデン問題に せいかいすると 1つ上がる。
+ * 金（パーフェクト）の中身は、ふつう30・EX1 60・EX2 120・EX3 300・ミックス40・きょうの5教科50・ふくしゅう30。
+ */
+export const CHEST_RANKS = [
+  null,
+  { id: 'bronze', name: '{銅|どう}の たからばこ', coins: 10 },
+  { id: 'silver', name: '銀の たからばこ', coins: 20 },
+  { id: 'gold', name: '金の たからばこ', coins: 30 },
+  { id: 'rainbow', name: 'にじの たからばこ', coins: 60 },
+];
+const CHEST_FACTOR = { normal: 1, ex1: 2, ex2: 4, ex3: 10, mix: 4 / 3, daily: 5 / 3, review: 1 };
+const STAR_STEP = [null, 'クリア', '★★', 'パーフェクト！'];
+
+/**
+ * @returns {{rank:number, coins:number, steps:{rank:number,label:string}[]}}
+ *   rank 0 は たからばこなし。steps は ランクが上がったわけ（けっか画面で1つずつ見せる）
+ */
+export function chestFor({ stageKind, correct, total, goldenHit = false }) {
+  const factor = CHEST_FACTOR[stageKind];
+  const none = { rank: 0, coins: 0, steps: [] };
+  if (!factor || total <= 0) return none;
+  const stars = starsFor(correct, total);
+  const steps = [];
+  for (let r = 1; r <= stars; r += 1) steps.push({ rank: r, label: STAR_STEP[r] });
+  if (goldenHit) steps.push({ rank: stars + 1, label: 'ゴールデン！' });
+  const rank = Math.min(CHEST_RANKS.length - 1, steps.length);
+  if (!rank) return none;
+  return { rank, coins: Math.round(CHEST_RANKS[rank].coins * factor), steps: steps.slice(0, rank) };
 }
 
 /** ★の数（0〜3） */

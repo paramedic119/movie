@@ -258,6 +258,7 @@ body[data-theme='space'] .review-lead { color: #fff; text-shadow: 0 2px 0 var(--
   letter-spacing: 0.04em;
 }
 .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 8px 0 16px; }
+.btn-row .btn { padding-inline: 10px; }
 
 .icon-btn {
   flex: none;
@@ -281,6 +282,8 @@ body[data-theme='space'] .review-lead { color: #fff; text-shadow: 0 2px 0 var(--
 
 .chip { display: inline-block; background: var(--yellow-l); border: 2px solid var(--ink); border-radius: 999px; padding: 1px 10px; font-size: 13px; font-weight: 700; margin: 2px; }
 .chip--new { background: var(--pink-l); }
+.chip--golden { background: linear-gradient(90deg, #ffe066, #ffc21a); }
+.chip--near { background: var(--pink-l); color: #c0264f; }
 .tag { display: inline-block; font-size: 12px; font-weight: 800; padding: 2px 10px; border-radius: 999px; border: 2px solid var(--ink); background: #fff; }
 .tag--partner { background: var(--yellow); }
 .subj-mini { display: inline-flex; align-items: center; gap: 2px; font-size: 12px; font-weight: 800; padding: 0 8px; border-radius: 999px; background: #fff; border: 2px solid var(--c, var(--ink)); color: var(--ink); }
@@ -331,6 +334,50 @@ body[data-theme='space'] .review-lead { color: #fff; text-shadow: 0 2px 0 var(--
 }
 .hero__title { font-weight: 800; font-size: 17px; margin-bottom: 4px; }
 .hero__next { font-size: 12px; color: var(--ink-soft); margin-top: 4px; }
+.hero__friend { display: block; margin-top: 2px; font-size: 12px; font-weight: 700; color: var(--ink-soft); text-decoration: none; }
+.hero__friend.ready { color: #e05a00; font-weight: 800; }
+
+/* きょうの ミッション */
+.missions { padding: 12px 14px; margin-top: 16px; }
+.missions__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.missions__head h2 { font-size: 17px; margin: 0; }
+.missions__count { font-size: 14px; font-weight: 800; background: var(--yellow-l); border: 2px solid var(--ink); border-radius: 999px; padding: 0 10px; }
+.missions__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.mission { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 2px solid #ece9f5; border-radius: 14px; }
+.mission.done { border-color: var(--ink); background: #fff8dd; }
+.mission.claimed { border-color: #ece9f5; background: #f4fbf7; }
+.mission__icon { flex: none; font-size: 24px; line-height: 1; }
+.mission__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.mission__text { font-size: 14px; font-weight: 700; line-height: 1.35; }
+.mission__bar { display: flex; align-items: center; gap: 6px; }
+.mission__bar .meter { flex: 1; height: 8px; }
+.mission__bar small { font-size: 11px; font-weight: 800; color: var(--ink-soft); }
+.meter--mission i { background: linear-gradient(90deg, #ff9f1c, #ff5d8f); }
+.mission.done .meter--mission i { background: linear-gradient(90deg, #62dca8, #17a864); }
+.mission__reward { flex: none; display: inline-flex; align-items: center; gap: 2px; font-size: 13px; font-weight: 800; color: var(--ink-soft); }
+.mission__ok { flex: none; font-size: 22px; }
+.btn--claim { flex: none; flex-direction: column; gap: 0; min-height: 44px; padding: 2px 10px; line-height: 1.2; background: var(--yellow); animation: glow-pulse 1.3s ease-in-out infinite; }
+.btn--claim small { display: inline-flex; align-items: center; gap: 2px; font-size: 12px; }
+.mission-notice .btn--claim { flex-direction: row; gap: 4px; }
+.missions__foot { margin: 8px 0 0; font-size: 13px; font-weight: 700; text-align: center; }
+.missions__foot small { display: block; font-size: 11px; color: var(--ink-soft); }
+
+/* 1週間の がんばりスタンプ */
+.stampcard { padding: 12px 14px; margin-top: 16px; }
+.stampcard__head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 2px 8px; margin-bottom: 8px; }
+.stampcard__head b { font-size: 15px; }
+.stampcard__head small { font-size: 12px; font-weight: 800; color: #e05a00; }
+.stampcard__days { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.stampcard__days li { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
+.stampcard__label { font-size: 11px; font-weight: 800; color: var(--ink-soft); white-space: nowrap; }
+.stampcard__mark { width: 100%; max-width: 40px; aspect-ratio: 1; border-radius: 50%; border: 2px dashed #d9d4c7; display: grid; place-items: center; font-size: 19px; line-height: 1; background: #fff; }
+.stampcard__days li.on .stampcard__mark { border: 3px solid #e0343f; background: radial-gradient(circle, rgba(224, 52, 63, 0.08) 0 60%, #fff 61%); }
+.stampcard__days li.is-today .stampcard__label { color: var(--ink); }
+.stampcard__days li.is-today:not(.on) .stampcard__mark { border: 2px solid var(--ink); }
+.stampcard__days li.is-future .stampcard__mark { opacity: 0.6; }
+.stampcard__goals { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px; margin: 8px 0 0; font-size: 12px; font-weight: 800; }
+.stampcard__goals > span { display: inline-flex; align-items: center; gap: 3px; background: #fff; border: 2px solid var(--ink); border-radius: 999px; padding: 0 8px; }
+.stampcard__goals > span.got { background: var(--mint-l); }
 
 .review-cta {
   width: 100%;
@@ -516,6 +563,8 @@ body[data-theme='space'] .review-lead { color: #fff; text-shadow: 0 2px 0 var(--
   paint-order: stroke fill;
 }
 .dots li.ng { background: var(--ng); }
+.dots li.gold { border-color: #b87800; box-shadow: 0 0 0 2px rgba(255, 194, 26, 0.9); }
+.dots li.gold.ok { box-shadow: none; color: #ffdd33; text-shadow: 0 0 6px #ffc21a, 0 0 2px #ffc21a; }
 .score-pill { font-size: 12px; font-weight: 800; padding: 1px 8px; border-radius: 999px; border: 2px solid var(--ink); background: #fff; }
 .score-pill.ok b { color: var(--ok); }
 .score-pill.ng b { color: var(--ng); }
@@ -799,6 +848,7 @@ body[data-theme='space'] .combo { color: #fff; }
 .feedback__answer { margin: 6px 0; font-size: 18px; }
 .feedback__answer b { font-size: 22px; }
 .feedback__badge { display: inline-block; margin: 4px 0; font-size: 14px; font-weight: 800; background: var(--lav-l); border: 2px solid var(--ink); border-radius: 999px; padding: 0 10px; }
+.feedback__badge--golden { background: linear-gradient(90deg, #ffe066, #ffc21a); margin-right: 4px; }
 .feedback__explain { margin: 8px 0 14px; font-size: 16px; line-height: 1.8; background: #fff; border: 2px solid #e8e5f2; border-radius: 14px; padding: 8px 12px; }
 .quiz.answered .answer { padding-bottom: 260px; }
 
@@ -844,7 +894,11 @@ body[data-theme='space'] .combo { color: #fff; }
 .result-money { display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; margin-top: 6px; }
 .chest {
   position: relative;
-  width: 76px;
+  min-width: 76px;
+  visibility: hidden;
+  --chest-body: #b8651f;
+  --chest-top: #d9822f;
+  --chest-band: #ffc21a;
   padding: 0;
   border: 0;
   background: none;
@@ -855,6 +909,20 @@ body[data-theme='space'] .combo { color: #fff; }
   color: var(--ink);
 }
 .chest:disabled { cursor: default; }
+.chest.shown { visibility: visible; }
+.chest__body { fill: var(--chest-body); }
+.chest__top { fill: var(--chest-top); }
+.chest__band { fill: var(--chest-band); }
+/* ランク：銅 → 銀 → 金 → にじ */
+.chest--r1 { --chest-body: #9a4f22; --chest-top: #c46b35; --chest-band: #eaa46c; }
+.chest--r2 { --chest-body: #7f8da4; --chest-top: #b4c1d6; --chest-band: #f3f6fb; }
+.chest--r3 { --chest-body: #e09a00; --chest-top: #ffc21a; --chest-band: #fff1a8; }
+.chest--r4 { --chest-band: #fff; }
+.chest--r4 .chest__body, .chest--r4 .chest__top { fill: url(#chest-rainbow); }
+.chest--r2 .chest__label { background: #eef2f8; }
+.chest--r3 .chest__label { background: #ffe680; }
+.chest--r4 .chest__label { background: linear-gradient(90deg, #ffd6e6, #fff4c4, #d7f7e9, #ddefff, #ede6ff); }
+.chest--r4 .chest__svg { filter: drop-shadow(0 0 5px rgba(255, 214, 51, 0.9)); }
 .chest__svg { position: relative; width: 64px; height: 56px; overflow: visible; }
 .chest__lid { transform-box: fill-box; transform-origin: 0% 100%; transition: transform 0.35s cubic-bezier(.3, 1.6, .5, 1); }
 .chest.open .chest__lid { transform: translate(-3px, -9px) rotate(-26deg); }
@@ -876,6 +944,10 @@ body[data-theme='space'] .combo { color: #fff; }
   transition: opacity 0.3s;
 }
 .chest.open .chest__rays { opacity: 1; animation: spin 6s linear infinite; }
+.chest--r3 .chest__rays, .chest--r4 .chest__rays { opacity: 0.6; animation: spin 6s linear infinite; }
+.chest--r4 .chest__rays {
+  background: repeating-conic-gradient(#ff5d8f 0 7deg, transparent 7deg 15deg, #ffc300 15deg 22deg, transparent 22deg 30deg, #2f8dff 30deg 37deg, transparent 37deg 45deg);
+}
 
 /* しょうごうゲージ */
 .gauge { margin: 12px auto 2px; max-width: 380px; text-align: left; }
@@ -933,6 +1005,33 @@ body[data-theme='space'] .combo { color: #fff; }
 .master-panel { background: linear-gradient(135deg, #fff6c8, #fff); font-weight: 800; }
 .notice { font-weight: 700; }
 .new-friend { display: flex; align-items: center; gap: 10px; }
+/* がんばりスタンプ・ミッション・つぎの なかま（けっか画面） */
+.stamp-notice { display: flex; align-items: center; gap: 14px; }
+.stamp-notice__mark {
+  flex: none;
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  border: 3px solid #e0343f;
+  display: grid;
+  place-items: center;
+  font-size: 30px;
+  transform: rotate(-12deg);
+  visibility: hidden;
+  background: radial-gradient(circle, rgba(224, 52, 63, 0.08) 0 60%, #fff 61%);
+}
+.stamp-notice__mark.on { visibility: visible; }
+.stamp-notice__body { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+.stamp-notice__body small { font-size: 13px; color: var(--ink-soft); }
+.stamp-notice__reward { margin-top: 4px; font-size: 14px; background: var(--yellow-l); border: 2px solid var(--ink); border-radius: 999px; padding: 0 10px; display: inline-flex; align-items: center; gap: 3px; }
+.mission-notice { display: flex; align-items: center; justify-content: space-between; gap: 8px 10px; flex-wrap: wrap; }
+.mission-notice small { font-size: 13px; }
+.next-friend { display: flex; align-items: center; gap: 12px; padding: 10px 14px; color: var(--ink); text-decoration: none; }
+.next-friend__emoji { font-size: 38px; line-height: 1; }
+.next-friend__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.next-friend.ready { background: linear-gradient(135deg, #fff4c4, #fff); animation: glow-pulse 1.3s ease-in-out infinite; }
+.next-friend__go { font-size: 18px; }
+.btn--near { animation: glow-pulse 1.3s ease-in-out infinite; }
 .big-emoji { font-size: 56px; line-height: 1.1; margin: 0; }
 .mistakes h2 { font-size: 18px; margin: 0 0 8px; }
 .mistakes h2 small { display: block; font-size: 12px; color: var(--ink-soft); font-weight: 700; }
@@ -1068,6 +1167,7 @@ body[data-theme='space'] .combo { color: #fff; }
 .parent-mistakes li { border-bottom: 1px solid #ece9f5; padding-bottom: 6px; }
 .settings .setting { display: flex; flex-direction: column; gap: 4px; margin: 0 0 14px; font-weight: 700; border: 0; padding: 0; }
 .settings .setting--row { flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; }
+.setting__note { display: block; font-size: 12px; font-weight: 700; color: var(--ink-soft); }
 .settings legend { padding: 0; margin-bottom: 4px; }
 .settings select { padding: 8px 10px; border: 3px solid var(--ink); border-radius: 12px; background: #fff; font-weight: 700; }
 .seg { display: flex; border: 3px solid var(--ink); border-radius: 14px; overflow: hidden; }
@@ -1203,6 +1303,41 @@ body[data-theme='space'] .combo { color: #fff; }
 .qcard--last { animation: last-glow 1.4s ease-in-out infinite; }
 .quiz.fever .qcard--last { animation: fever-spin 3s linear infinite, last-glow 1.4s ease-in-out infinite; }
 
+/* ゴールデン問題：金色にかがやくカード（正解でコイン3倍） */
+.qcard--golden {
+  border-color: #b87800;
+  background: linear-gradient(160deg, #fffbe6 0%, #fff 45%, #fff3c4 100%);
+  animation: golden-glow 1.6s ease-in-out infinite;
+}
+.qcard--golden::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(110deg, transparent 38%, rgba(255, 255, 255, 0.6) 50%, transparent 62%) no-repeat;
+  background-size: 250% 100%;
+  animation: golden-shine 2.4s ease-in-out infinite;
+}
+.quiz.fever .qcard--golden {
+  background:
+    linear-gradient(160deg, #fffbe6 0%, #fff 45%, #fff3c4 100%) padding-box,
+    conic-gradient(from var(--fever-a), #ff5d8f, #ffc300, #62dca8, #2f8dff, #8a63ff, #ff5d8f) border-box;
+  animation: fever-spin 3s linear infinite, golden-glow 1.6s ease-in-out infinite;
+}
+.golden-tag { font-size: 12px; font-weight: 800; padding: 0 10px; border-radius: 999px; border: 2px solid #b87800; background: linear-gradient(90deg, #ffe066, #ffc21a); color: #5a3a00; white-space: nowrap; }
+.golden-tag b { color: #c0264f; }
+.fx-float.golden-text { font-size: 30px; color: #fff3a0; }
+.fx-float.rank-text { font-size: 22px; color: #fff; }
+.fx-banner--golden .fx-banner__strip {
+  top: 24%;
+  padding: 8px 0 6px;
+  background: repeating-linear-gradient(-45deg, #f2a600 0 22px, #ffc21a 22px 44px);
+  box-shadow: 0 0 0 4px #b87800;
+}
+.fx-banner--golden .fx-banner__text { font-size: min(clamp(34px, 10vw, 58px), calc(84vw / var(--len, 4))); }
+.fx-banner--golden .fx-banner__sub { font-size: 15px; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.45); }
+
 /* 帯のバナー：フィーバー用（にじ色）・下のボタンを押せるもの */
 .fx-banner--pass { pointer-events: none; }
 .fx-banner--fever .fx-banner__strip {
@@ -1228,6 +1363,11 @@ body[data-theme='space'] .combo { color: #fff; }
 @keyframes chest-wobble { 0%, 100% { transform: rotate(0); } 20% { transform: rotate(-7deg); } 40% { transform: rotate(6deg); } 60% { transform: rotate(-4deg); } 80% { transform: rotate(2deg); } }
 @keyframes ex-in { from { transform: scale(0.6) rotate(-4deg); opacity: 0; } 70% { transform: scale(1.03) rotate(1deg); opacity: 1; } to { transform: none; opacity: 1; } }
 @keyframes shine { 0% { transform: translateX(-100%); } 60%, 100% { transform: translateX(100%); } }
+@keyframes golden-glow {
+  0%, 100% { box-shadow: 0 6px 0 #b87800, 0 0 0 3px rgba(255, 194, 26, 0.55), 0 0 16px 3px rgba(255, 194, 26, 0.45); }
+  50% { box-shadow: 0 6px 0 #b87800, 0 0 0 3px rgba(255, 194, 26, 0.95), 0 0 32px 10px rgba(255, 194, 26, 0.7); }
+}
+@keyframes golden-shine { 0% { background-position: 150% 0; } 55%, 100% { background-position: -60% 0; } }
 @keyframes last-glow { 0%, 100% { box-shadow: 0 6px 0 var(--ink), 0 0 0 0 rgba(255, 194, 26, 0); } 50% { box-shadow: 0 6px 0 var(--ink), 0 0 0 7px rgba(255, 194, 26, 0.55); } }
 
 /* 「おだやか」：くり返し動くアニメーションを止める */
@@ -1244,7 +1384,15 @@ body[data-effects='calm'] .chest.ready,
 body[data-effects='calm'] .chest.open .chest__rays,
 body[data-effects='calm'] .ex-panel,
 body[data-effects='calm'] .ex-panel__stripe::after,
-body[data-effects='calm'] .ex-panel .btn--ex { animation: none; }
+body[data-effects='calm'] .ex-panel .btn--ex,
+body[data-effects='calm'] .qcard--golden,
+body[data-effects='calm'] .chest--r3 .chest__rays,
+body[data-effects='calm'] .chest--r4 .chest__rays,
+body[data-effects='calm'] .btn--claim,
+body[data-effects='calm'] .btn--near,
+body[data-effects='calm'] .next-friend.ready { animation: none; }
+body[data-effects='calm'] .qcard--golden { box-shadow: 0 6px 0 #b87800, 0 0 0 3px rgba(255, 194, 26, 0.7); }
+body[data-effects='calm'] .qcard--golden::after { display: none; }
 body[data-effects='calm'] .result-stars .star.on { animation: none; }
 body[data-effects='calm'] .feedback { animation: fade-in 0.2s; }
 

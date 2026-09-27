@@ -2,7 +2,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { comboMultiplier, coinsForAnswer, starsFor, stageBonus, titleFor, nextExStage, TITLES, comboTier, COMBO_TIERS, FEVER_COMBO } from '../public/js/game/rewards.js';
+import { comboMultiplier, coinsForAnswer, starsFor, chestFor, CHEST_RANKS, titleFor, nextExStage, TITLES, comboTier, COMBO_TIERS, FEVER_COMBO, GOLDEN_MULT, pickGoldenIndex } from '../public/js/game/rewards.js';
 import { addMistake, recordReview, dueEntries, startOfDay, DAY_MS, NOTEBOOK_LIMIT } from '../public/js/game/review.js';
 import { buildStage, buildMixStage, buildReviewStage, buildDailyStage, questionWeight } from '../public/js/game/stage.js';
 import { createStore, recordAnswer, recordStage, remainingSeconds, dateKey, mergeWithDefaults, defaultState, STORAGE_KEY } from '../public/js/game/state.js';
@@ -38,6 +38,46 @@ test('コンボでコインがふえ、上限は3倍', () => {
   assert.equal(coinsForAnswer({ stageKind: 'normal', combo: 1, usedHint: true }), 5, 'ヒントを使うと半分');
 });
 
+test('たからばこ：★の数で 銅・銀・金、ゴールデン問題に せいかいすると 1つ上がる', () => {
+  const rank = (correct, total, goldenHit = false, stageKind = 'normal') => chestFor({ stageKind, correct, total, goldenHit }).rank;
+  assert.deepEqual([rank(2, 5), rank(3, 5), rank(4, 5), rank(5, 5)], [0, 1, 2, 3]);
+  assert.deepEqual([rank(2, 5, true), rank(3, 5, true), rank(4, 5, true), rank(5, 5, true)], [1, 2, 3, 4]);
+  assert.equal(CHEST_RANKS[4].id, 'rainbow');
+  // 中身は ランクとステージで決まる（運では変わらない）
+  const coins = (kind, correct, total, g = false) => chestFor({ stageKind: kind, correct, total, goldenHit: g }).coins;
+  assert.deepEqual([coins('normal', 3, 5), coins('normal', 4, 5), coins('normal', 5, 5), coins('normal', 5, 5, true)], [10, 20, 30, 60]);
+  assert.deepEqual(['ex1', 'ex2', 'ex3', 'mix', 'daily', 'review'].map((k) => coins(k, 3, 3)), [60, 120, 300, 40, 50, 30]);
+  assert.equal(coins('revenge', 3, 3, true), 0, 'その場のやり直し（リベンジ）には たからばこなし');
+  // ランクが上がったわけを 1つずつ見せる
+  assert.deepEqual(
+    chestFor({ stageKind: 'normal', correct: 5, total: 5, goldenHit: true }).steps.map((x) => x.label),
+    ['クリア', '★★', 'パーフェクト！', 'ゴールデン！'],
+  );
+  assert.deepEqual(chestFor({ stageKind: 'normal', correct: 2, total: 5, goldenHit: true }).steps, [{ rank: 1, label: 'ゴールデン！' }]);
+});
+
+test('ゴールデン問題：せいかいで コイン3倍。どの問題になるかは ランダム（1ステージに1問まで）', () => {
+  assert.equal(GOLDEN_MULT, 3);
+  assert.equal(coinsForAnswer({ stageKind: 'normal', combo: 1, golden: true }), 30);
+  assert.equal(coinsForAnswer({ stageKind: 'normal', combo: 1, golden: true, usedHint: true }), 15, 'ヒントを使うと半分');
+  const rng = createRng(7);
+  assert.equal(pickGoldenIndex(5, 'normal', rng, 0), -1, 'オフのときは出ない');
+  assert.equal(pickGoldenIndex(5, 'revenge', rng, 1), -1, 'リベンジには出ない');
+  const seen = new Set();
+  let hits = 0;
+  for (let i = 0; i < 4000; i += 1) {
+    const g = pickGoldenIndex(5, 'normal', rng);
+    if (g >= 0) {
+      hits += 1;
+      seen.add(g);
+    }
+    assert.ok(g >= -1 && g < 5);
+  }
+  assert.deepEqual([...seen].sort(), [0, 1, 2, 3, 4], 'どの問題にも出る');
+  assert.ok(hits / 4000 > 0.4 && hits / 4000 < 0.55, `5問のステージで 約半分（${hits / 4000}）`);
+  for (let i = 0; i < 50; i += 1) assert.ok(pickGoldenIndex(3, 'ex1', rng, 1) >= 0, 'rate=1 なら かならず出る');
+});
+
 test('コンボの段階（演出）：3でいいかんじ、5でフィーバー、あとは段階的に', () => {
   assert.deepEqual([0, 1, 2, 3, 4, 5, 7, 8, 10, 11, 14, 30].map(comboTier), [0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 5, 5]);
   assert.equal(FEVER_COMBO, 5);
@@ -51,9 +91,8 @@ test('★・ボーナス・EXの順番・しょうごう', () => {
   assert.equal(starsFor(4, 5), 2);
   assert.equal(starsFor(3, 5), 1);
   assert.equal(starsFor(2, 5), 0);
-  assert.equal(stageBonus('normal', 5, 5), 30);
-  assert.equal(stageBonus('normal', 4, 5), 0);
-  assert.equal(stageBonus('ex3', 3, 3), 300);
+  assert.equal(chestFor({ stageKind: 'normal', correct: 5, total: 5 }).coins, 30, 'パーフェクトは 金のたからばこ');
+  assert.equal(chestFor({ stageKind: 'ex3', correct: 3, total: 3 }).coins, 300);
   assert.equal(nextExStage('normal'), 'ex1');
   assert.equal(nextExStage('ex1'), 'ex2');
   assert.equal(nextExStage('ex2'), 'ex3');
@@ -153,7 +192,7 @@ test('きょうの5教科：教科ごとに1問ずつ', () => {
   const daily = buildDailyStage({ unitsBySubject: subjects, rng });
   assert.equal(daily.length, 5);
   assert.deepEqual(daily.map((q) => q.subject), ['kokugo', 'sansu', 'rika', 'shakai', 'eigo']);
-  assert.equal(stageBonus('daily', 5, 5), 50);
+  assert.equal(chestFor({ stageKind: 'daily', correct: 5, total: 5 }).coins, 50);
 });
 
 test('保存：読みこみ・こわれたデータ・初期値でうめる', () => {
@@ -201,7 +240,7 @@ test('保存データの一部がこわれていても、読みこんで遊べ�
   assert.deepEqual(st.unitStats['rika-b'].recent, [1, 0]);
   assert.deepEqual(Object.keys(st.notebook), ['rika-a-1'], '出題できないノートの記録は捨てる');
   assert.deepEqual(st.qstats, {});
-  assert.deepEqual(st.days[today], { sec: 100, n: 0, c: 0, coins: 0 });
+  assert.deepEqual(st.days[today], { sec: 100, n: 0, c: 0, coins: 0, stages: 0 });
   assert.equal(st.settings.limitMin, 30);
   assert.equal(st.settings.breakMin, 20);
   assert.equal(st.settings.effects, 'normal');

@@ -3,11 +3,12 @@
 import { $, $$, esc, md, onAct } from './dom.js';
 import { createHissan } from './hissan.js';
 import { figureSvg } from './figure.js';
-import { openModal } from './modal.js';
+import { openModal, toast } from './modal.js';
 import { normalizeNumber, groupBy4, withCommas } from '../lib/numfmt.js';
 import { plainText } from '../lib/markup.js';
-import { coinsForAnswer, comboMultiplier, comboTier, COMBO_TIERS, FEVER_COMBO, stageBonus, starsFor, STAGE_INFO, nextExStage } from '../game/rewards.js';
+import { coinsForAnswer, comboMultiplier, comboTier, COMBO_TIERS, FEVER_COMBO, chestFor, GOLDEN_MULT, starsFor, STAGE_INFO, nextExStage } from '../game/rewards.js';
 import { recordAnswer, recordStage, addCoins, dateKey } from '../game/state.js';
+import { missionsOnAnswer, missionsOnStage, stampDay } from '../game/missions.js';
 import { friendById, unlockSecretFriends } from '../game/shop.js';
 
 const LEVEL_TAG = { 1: 'きほん', 2: 'ひょうじゅん', 3: 'チャレンジ' };
@@ -94,7 +95,9 @@ export function mountQuiz(root, ctx) {
       .map((_, i) => {
         const r = s.results[i];
         const cls = r ? (r.correct ? 'ok' : 'ng') : i === s.index ? 'now' : '';
-        return `<li class="${cls}">${r?.correct ? '★' : ''}</li>`;
+        // ゴールデン問題は、出てくるまで ひみつ
+        const gold = r ? r.golden : i === s.index && isGolden();
+        return `<li class="${cls} ${gold ? 'gold' : ''}">${r?.correct ? '★' : ''}</li>`;
       })
       .join('');
     $('.dots', root).innerHTML = dots;
@@ -113,6 +116,11 @@ export function mountQuiz(root, ctx) {
     const $quiz = root.querySelector('.quiz');
     $quiz.classList.toggle('fever', s.combo >= FEVER_COMBO);
     $quiz.dataset.tier = String(tier);
+  }
+
+  /** いまの問題が ゴールデン問題か */
+  function isGolden() {
+    return s.golden === s.index;
   }
 
   /** 全問せいかいまで あと1問のとき（それまで ぜんぶ せいかい） */
@@ -139,11 +147,14 @@ export function mountQuiz(root, ctx) {
     const bigClass = subj.id === 'kokugo' ? 'qcard__big kyokasho' : isEnglish(plainText(q.big ?? '')) ? 'qcard__big en' : 'qcard__big';
     const canSpeak = q.speak && speech.available();
     const lastChance = isLastChance();
+    const golden = isGolden();
     $card.classList.toggle('qcard--last', lastChance);
+    $card.classList.toggle('qcard--golden', golden);
     $card.innerHTML = `
       ${lastChance ? `<div class="last-one" role="status"><b>ラスト1問！</b> あと1問で ${esc(LAST_ONE_GOAL[s.stageKind] && s.unitId ? LAST_ONE_GOAL[s.stageKind] : 'パーフェクト')}！</div>` : ''}
       <div class="qcard__head">
         <span class="level-tag lv${q.level}">${LEVEL_TAG[q.level] ?? ''}</span>
+        ${golden ? `<span class="golden-tag">✨ ゴールデン <b>コイン×${GOLDEN_MULT}</b></span>` : ''}
         ${crossSubject ? `<span class="subj-mini" style="--c:${subj.color}">${subj.emoji} ${esc(subj.name)}</span>` : ''}
         ${q.hint || q.kind === 'hissan' ? '<button class="hint-btn" data-act="hint">💡 ヒント</button>' : ''}
       </div>
@@ -228,9 +239,20 @@ export function mountQuiz(root, ctx) {
     root.querySelector('.quiz').classList.remove('answered', 'intro');
     renderStatus();
     renderCard();
+    const golden = isGolden();
+    if (golden) {
+      // ゴールデン問題が あらわれた！（下のボタンは そのまま押せる）
+      sfx.golden();
+      if (ctx.effectsLevel() !== 'calm') {
+        later(() => fx.banner('ゴールデン問題！', { sub: `せいかいで コイン ×${GOLDEN_MULT}`, variant: 'golden', duration: 650, pass: true }), 100);
+      }
+    }
     if (isLastChance()) {
-      sfx.drumroll();
-      say('ラスト1問！ おちついて いこう！');
+      if (golden) later(() => sfx.drumroll(), 650);
+      else sfx.drumroll();
+      say(golden ? 'ラスト1問は ゴールデン！ おちついて いこう！' : 'ラスト1問！ おちついて いこう！');
+    } else if (golden) {
+      say(`ゴールデン問題だ！ せいかいで コイン${GOLDEN_MULT}ばい！`);
     }
     if (q.kind === 'choice') {
       renderChoices();
@@ -275,19 +297,23 @@ export function mountQuiz(root, ctx) {
     answered = true;
     const now = ctx.now();
     const prevCombo = s.combo;
+    const golden = isGolden();
     s.combo = correct ? s.combo + 1 : 0;
     s.maxCombo = Math.max(s.maxCombo, s.combo);
-    const coins = correct ? coinsForAnswer({ stageKind: s.stageKind, combo: s.combo, usedHint }) : 0;
+    const coins = correct ? coinsForAnswer({ stageKind: s.stageKind, combo: s.combo, usedHint, golden }) : 0;
     const before = store.state.coins;
     const tierUp = correct && comboTier(s.combo) > comboTier(prevCombo);
     const feverEnded = !correct && prevCombo >= FEVER_COMBO;
     let reviewResult = 'none';
+    let missions = [];
     store.update((st) => {
       reviewResult = recordAnswer(st, q, correct, now);
       addCoins(st, coins, now);
+      missions = missionsOnAnswer(st, now, { correct, combo: s.combo, golden, subject: q.subject, fromNotebook: Boolean(q.fromNotebook) });
     });
     if (reviewResult === 'mastered') s.mastered.push(q);
-    s.results.push({ q, correct, coins, given, usedHint });
+    s.results.push({ q, correct, coins, given, usedHint, golden });
+    missionCleared(missions);
     s.stageCoins += coins;
     root.querySelector('.quiz').classList.add('answered');
     renderStatus();
@@ -326,21 +352,40 @@ export function mountQuiz(root, ctx) {
       } else {
         say(PRAISE[Math.floor(Math.random() * PRAISE.length)]);
       }
+      if (golden) {
+        // ゴールデン問題に せいかい！ 大当たりの演出
+        later(() => sfx.jackpot(), 150);
+        later(() => fx.floatText(c.x, c.y - 90, 'ゴールデン！', 'golden-text'), 280);
+        fx.burst(c.x, c.y);
+        if (ctx.effectsLevel() !== 'calm') fx.confetti(700);
+        if (!tierUp) say(`ゴールデン せいかい！ コイン${GOLDEN_MULT}ばい！`);
+      }
     } else {
       sfx.wrong();
       fx.shake($card);
-      say(feverEnded ? 'フィーバーは ここまで。また つなごう！' : COMFORT[Math.floor(Math.random() * COMFORT.length)]);
+      say(feverEnded ? 'フィーバーは ここまで。また つなごう！' : golden ? 'ゴールデンは また こんど！ かいせつを 見てみよう' : COMFORT[Math.floor(Math.random() * COMFORT.length)]);
     }
-    showFeedback(correct, coins, reviewResult);
+    showFeedback(correct, coins, reviewResult, golden);
   }
 
-  function showFeedback(correct, coins, reviewResult) {
+  /** ミッションを クリアしたら、じゃまにならないように 下にお知らせ */
+  function missionCleared(list) {
+    if (!list.length) return;
+    s.missionsDone.push(...list.map((m) => ({ ...m })));
+    later(() => {
+      sfx.mission();
+      toast('🎯 ミッション クリア！');
+    }, 900);
+  }
+
+  function showFeedback(correct, coins, reviewResult, golden = false) {
     const extra =
-      reviewResult === 'mastered'
+      (correct && golden ? `<div class="feedback__badge feedback__badge--golden">✨ ゴールデン ボーナス！ コイン ×${GOLDEN_MULT}</div>` : '') +
+      (reviewResult === 'mastered'
         ? '<div class="feedback__badge">🎉 この問題を「おぼえた！」</div>'
         : reviewResult === 'up'
           ? '<div class="feedback__badge">📒 ふくしゅう 1だんかいアップ！</div>'
-          : '';
+          : '');
     $feedback.className = `feedback ${correct ? 'feedback--ok' : 'feedback--ng'}`;
     $feedback.innerHTML = `
       <div class="feedback__head">
@@ -428,24 +473,38 @@ export function mountQuiz(root, ctx) {
     const correct = s.results.filter((r) => r.correct).length;
     const total = s.results.length;
     const stars = starsFor(correct, total);
-    let bonus = stageBonus(s.stageKind, correct, total);
+    const perfect = total > 0 && correct === total;
+    const goldenHit = s.results.some((r) => r.golden && r.correct);
+    // ステージの たからばこ（★の数で ランクが決まり、ゴールデン問題に せいかいすると 1つ上がる）
+    let chest = chestFor({ stageKind: s.stageKind, correct, total, goldenHit });
     let rec = { newStars: false, newEx: false };
     let newFriends = [];
     let dailyFirst = false;
+    let stamp = null;
+    let stageMissions = [];
     store.update((st) => {
       if (s.stageKind === 'daily') {
-        // きょうの5教科のボーナスは 1日1回（全問せいかいしたとき）
+        // きょうの5教科の たからばこは 1日1回（全問せいかいしたとき）
         const today = dateKey(now);
-        dailyFirst = bonus > 0 && !(st.daily.date === today && st.daily.cleared);
-        if (!dailyFirst) bonus = 0;
+        dailyFirst = perfect && !(st.daily.date === today && st.daily.cleared);
+        if (!dailyFirst) chest = { rank: 0, coins: 0, steps: [] };
         if (dailyFirst) st.daily = { date: today, cleared: true };
       }
       rec = recordStage(st, { unitId: s.unitId, stageKind: s.stageKind, correct, total, stars });
-      addCoins(st, bonus, now);
+      addCoins(st, chest.coins, now);
+      // ステージをクリア（★1つ以上）した日には、がんばりスタンプ
+      if (stars >= 1 && s.stageKind !== 'revenge') stamp = stampDay(st, now);
+      stageMissions = missionsOnStage(st, now, {
+        stageKind: s.stageKind,
+        stars,
+        perfect,
+        subject: ['review', 'daily'].includes(s.subjectId) ? '' : s.subjectId,
+        furikaeri: Boolean(s.unitId && ctx.unitById(s.unitId)?.grade),
+      });
       newFriends = unlockSecretFriends(st, ctx.friendCtx());
     });
+    const bonus = chest.coins;
     s.chainCoins += s.stageCoins + bonus;
-    const perfect = total > 0 && correct === total;
     ctx.lastResult = {
       subjectId: s.subjectId,
       unitId: s.unitId,
@@ -457,6 +516,10 @@ export function mountQuiz(root, ctx) {
       stars,
       stageCoins: s.stageCoins,
       bonus,
+      chest,
+      goldenHit,
+      stamp,
+      missionsDone: [...s.missionsDone, ...stageMissions.map((m) => ({ ...m }))],
       maxCombo: s.maxCombo,
       results: s.results,
       mastered: s.mastered,

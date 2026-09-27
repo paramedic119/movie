@@ -90,6 +90,14 @@ async function playStage(page, n, correct = true) {
 }
 
 const coins = (page) => page.evaluate(() => globalThis.__mq.store.state.coins);
+/** ゴールデン問題を出さない（コインの数を決まった値で確かめるとき） */
+const noGolden = (page) => page.evaluate(() => (globalThis.__mq.goldenRate = 0));
+
+/** この端末の きょうの日づけ（'YYYY-MM-DD'） */
+const TODAY_KEY = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 test('ホーム：はじめての案内が出て、5教科がそろっていて、エラーが出ない', async () => {
   const { page, errors, context } = await openApp({ init: null });
@@ -150,6 +158,7 @@ test('まちがえた問題はノートに入り、ふくしゅうで1だんか�
 
 test('きょうの5教科チャレンジ：5教科から1問ずつ、ボーナスは1日1回', async () => {
   const { page, context } = await openApp();
+  await noGolden(page);
   await page.click('.daily-cta');
   const subjects = [];
   for (let i = 0; i < 5; i += 1) subjects.push((await answer(page, true)).subject);
@@ -382,5 +391,145 @@ test('スマホのせまい画面（360px）でも 横にはみ出さない', as
   assert.ok((await overflow()) <= 0, 'クイズ画面');
   await playStage(page, 5);
   assert.ok((await overflow()) <= 0, 'けっか画面');
+  await context.close();
+});
+
+test('ゴールデン問題：金色のカードで、せいかいすると コイン3倍・たからばこは にじ色', async () => {
+  const { page, errors, context } = await openApp();
+  await page.evaluate(() => (globalThis.__mq.goldenRate = 1));
+  await page.click('.subject-card[data-id="rika"]');
+  await page.click('.unit-card');
+  await page.waitForSelector('.qcard');
+  const gi = await page.evaluate(() => globalThis.__mq.session.golden);
+  assert.ok(gi >= 0 && gi < 5, 'ステージに1問 ゴールデン問題');
+  for (let i = 0; i < 5; i += 1) {
+    await currentQuestion(page);
+    const golden = await page.$('.qcard--golden');
+    assert.equal(Boolean(golden), i === gi, `${i + 1}問目`);
+    if (i === gi) assert.match(await page.textContent('.golden-tag'), /コイン×3/);
+    await answer(page, true, { next: false });
+    if (i === gi) assert.match(await page.textContent('#feedback'), /ゴールデン ボーナス/);
+    await page.click('[data-act="next"]');
+  }
+  await page.waitForFunction(() => location.hash === '#/result');
+  const r = await page.evaluate(() => {
+    const x = globalThis.__mq.lastResult;
+    return { coins: x.results.map((y) => y.coins), golden: x.results.map((y) => Boolean(y.golden)), chest: x.chest, bonus: x.bonus };
+  });
+  // 10コイン × コンボ倍率（1, 1.25, 1.5, 1.75, 2）。ゴールデン問題は さらに3倍（まるめるのは さいご）
+  const raw = [10, 12.5, 15, 17.5, 20];
+  assert.deepEqual(r.coins, raw.map((c, i) => Math.round(i === gi ? c * 3 : c)), 'ゴールデン問題だけ コイン3倍');
+  assert.deepEqual(r.golden, raw.map((_, i) => i === gi));
+  assert.equal(r.chest.rank, 4);
+  assert.equal(r.bonus, 60);
+  assert.ok(await page.$('.chip--golden'));
+  // 銅 → 銀 → 金 → にじ と ランクアップしてから ひらく
+  await page.waitForSelector('.chest.chest--r1.shown');
+  await page.waitForSelector('.chest.chest--r4.open');
+  assert.match(await page.textContent('.chest__label'), /60/);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('たからばこ：★2なら 銀。あと1問で パーフェクトなら「おしい！」', async () => {
+  const { page, context } = await openApp();
+  await noGolden(page);
+  await page.click('.subject-card[data-id="rika"]');
+  await page.click('.unit-card');
+  await playStage(page, 5, (i) => i !== 2);
+  const r = await page.evaluate(() => globalThis.__mq.lastResult);
+  assert.equal(r.chest.rank, 2);
+  assert.equal(r.bonus, 20);
+  await page.waitForSelector('.chest.chest--r2.open');
+  assert.match(await page.textContent('.chip--near'), /あと1問で パーフェクト/);
+  assert.ok(await page.$('[data-act="retry"].btn--near'), 'もういちど ボタンを目立たせる');
+  await context.close();
+});
+
+test('ミッション：クリアすると知らせて、ホームで うけとる。3つ ぜんぶで ボーナス', async () => {
+  const init = (key) => {
+    if (localStorage.getItem('manabi-quest:v1')) return;
+    const m = (kind, goal, coins, n, claimed) => ({ kind, goal, coins, n, done: n >= goal, claimed, seen: [] });
+    localStorage.setItem(
+      'manabi-quest:v1',
+      JSON.stringify({ v: 1, seenGuide: true, missions: { date: key, bonus: false, list: [m('correct', 15, 20, 14, false), m('combo', 1, 30, 1, true), m('golden', 1, 30, 1, true)] } }),
+    );
+  };
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await context.route(/^https?:\/\/(?!localhost)/, (r) => r.abort());
+  await context.addInitScript(init, TODAY_KEY());
+  const page = await context.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto(`${BASE}?debug`);
+  await page.waitForSelector('.missions');
+  assert.equal(await page.$$eval('.mission', (els) => els.length), 3);
+  assert.equal(await page.$$eval('.mission.claimed', (els) => els.length), 2);
+  assert.equal(await page.$('.btn--claim'), null, 'まだ うけとれない');
+  await page.click('.subject-card[data-id="sansu"]');
+  await page.click('.unit-card[data-id="sansu-keisan"]');
+  await answer(page, true, { next: false });
+  await page.waitForSelector('.toast.show');
+  assert.match(await page.textContent('.toast'), /ミッション クリア/);
+  await page.click('[data-act="quit"]');
+  await page.click('.modal .btn--plain');
+  await page.click('[data-tab="home"]');
+  await page.waitForSelector('.btn--claim');
+  const before = await coins(page);
+  await page.click('.btn--claim');
+  await page.waitForFunction(() => globalThis.__mq.store.state.missions.bonus === true);
+  assert.equal((await coins(page)) - before, 20 + 50, 'ミッションの20と コンプリートボーナス50');
+  assert.equal(await page.$$eval('.mission.claimed', (els) => els.length), 3);
+  assert.match(await page.textContent('.missions__foot'), /コンプリート/);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('がんばりスタンプ：ステージを クリアした日に1つ（けっか画面と ホームに出る）', async () => {
+  const { page, context } = await openApp();
+  await noGolden(page);
+  assert.equal(await page.$$eval('.stampcard__days li.on', (els) => els.length), 0);
+  await page.click('.subject-card[data-id="rika"]');
+  await page.click('.unit-card');
+  await playStage(page, 5, (i) => i !== 0);
+  await page.waitForSelector('.stamp-notice__mark.on');
+  assert.match(await page.textContent('.stamp-notice'), /スタンプ ゲット/);
+  await page.click('[data-act="retry"]');
+  await playStage(page, 5, (i) => i !== 0);
+  assert.equal(await page.$('.stamp-notice'), null, '同じ日は1つだけ');
+  await page.click('[data-act="back"]');
+  await page.click('[data-tab="home"]');
+  await page.waitForSelector('.stampcard__days li.is-today.on');
+  assert.equal(await page.$$eval('.stampcard__days li.on', (els) => els.length), 1);
+  await context.close();
+});
+
+test('演出「おだやか」：たからばこは すぐに さいごのランクで ひらく', async () => {
+  const { page, context } = await openApp({
+    init: () => localStorage.setItem('manabi-quest:v1', JSON.stringify({ v: 1, seenGuide: true, settings: { effects: 'calm' } })),
+  });
+  await noGolden(page);
+  await page.click('.subject-card[data-id="rika"]');
+  await page.click('.unit-card');
+  await playStage(page, 5);
+  await page.waitForSelector('.chest.chest--r3.open', { timeout: 3000 });
+  await context.close();
+});
+
+test('おうちの方ページ：ゴールデン問題をオフにできる', async () => {
+  const { page, context } = await openApp({
+    init: () => localStorage.setItem('manabi-quest:v1', JSON.stringify({ v: 1, seenGuide: true, pin: '1234' })),
+  });
+  await page.evaluate(() => (globalThis.__mq.goldenRate = 1));
+  await page.click('[data-tab="parent"]');
+  await page.fill('input[name="pin"]', '1234');
+  await page.click('.gate__form button[type="submit"]');
+  await page.click('input[data-setting="golden"]');
+  assert.equal(await page.evaluate(() => globalThis.__mq.store.state.settings.golden), false);
+  await page.click('[data-tab="home"]');
+  await page.click('.subject-card[data-id="rika"]');
+  await page.click('.unit-card');
+  await page.waitForSelector('.qcard');
+  assert.equal(await page.evaluate(() => globalThis.__mq.session.golden), -1, 'オフなら 出ない');
   await context.close();
 });

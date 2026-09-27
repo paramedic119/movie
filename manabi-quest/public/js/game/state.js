@@ -29,11 +29,15 @@ export function defaultState({ reducedMotion = false } = {}) {
       effects: reducedMotion ? 'calm' : 'normal',
       sound: true,
       voice: true,
+      golden: true,
     },
     extra: { date: '', min: 0 },
     pin: null,
     achievements: {},
     daily: { date: '', cleared: false },
+    // きょうのミッション（missions.js）と、1週間の がんばりスタンプで もらったボーナス
+    missions: { date: '', list: [], bonus: false },
+    week: { start: '', got: [] },
     seenGuide: false,
   };
 }
@@ -140,7 +144,7 @@ export function sanitizeState(st, defaults = defaultState()) {
     recent: Array.isArray(x.recent) ? x.recent.filter((v) => v === 0 || v === 1).slice(-RECENT_LEN) : [],
   }));
   st.notebook = mapRecords(st.notebook, fixNotebookEntry);
-  st.days = mapRecords(st.days, (d) => ({ sec: count(d.sec), n: count(d.n), c: count(d.c), coins: count(d.coins) }));
+  st.days = mapRecords(st.days, (d) => ({ sec: count(d.sec), n: count(d.n), c: count(d.c), coins: count(d.coins), stages: count(d.stages) }));
 
   const set = st.settings;
   const def = defaults.settings;
@@ -149,11 +153,37 @@ export function sanitizeState(st, defaults = defaultState()) {
   if (!EFFECT_LEVELS.includes(set.effects)) set.effects = def.effects;
   if (typeof set.sound !== 'boolean') set.sound = def.sound;
   if (typeof set.voice !== 'boolean') set.voice = def.voice;
+  if (typeof set.golden !== 'boolean') set.golden = def.golden;
 
   st.extra = { date: typeof st.extra.date === 'string' ? st.extra.date : '', min: count(st.extra.min) };
   if (st.pin !== null && !(typeof st.pin === 'string' && /^\d{4}$/.test(st.pin))) st.pin = null;
   st.daily = { date: typeof st.daily.date === 'string' ? st.daily.date : '', cleared: st.daily.cleared === true };
+  st.missions = fixMissions(st.missions);
+  st.week = {
+    start: typeof st.week.start === 'string' ? st.week.start : '',
+    got: Array.isArray(st.week.got) ? [...new Set(st.week.got.filter((d) => Number.isInteger(d) && d > 0 && d <= 7))] : [],
+  };
   return st;
+}
+
+/** きょうのミッションの記録（形がおかしければ、その日のミッションを作りなおす） */
+function fixMissions(m) {
+  const empty = { date: '', list: [], bonus: false };
+  if (typeof m.date !== 'string' || !Array.isArray(m.list)) return empty;
+  const list = m.list.filter((x) => isPlainObject(x) && typeof x.kind === 'string' && count(x.goal, 0) >= 1);
+  if (list.length !== m.list.length || list.length > 5) return empty;
+  return {
+    date: m.date,
+    bonus: m.bonus === true,
+    list: list.map((x) => ({
+      ...x,
+      n: Math.min(count(x.n), x.goal),
+      coins: count(x.coins),
+      done: x.done === true || count(x.n) >= x.goal,
+      claimed: x.claimed === true,
+      seen: Array.isArray(x.seen) ? x.seen.filter((v) => typeof v === 'string') : [],
+    })),
+  };
 }
 
 export function createStore({ storage = safeStorage(), reducedMotion = false } = {}) {
@@ -209,7 +239,8 @@ export function dateKey(ts) {
 
 export function dayRecord(state, ts) {
   const key = dateKey(ts);
-  if (!state.days[key]) state.days[key] = { sec: 0, n: 0, c: 0, coins: 0 };
+  if (!state.days[key]) state.days[key] = { sec: 0, n: 0, c: 0, coins: 0, stages: 0 };
+  state.days[key].stages ??= 0;
   return state.days[key];
 }
 

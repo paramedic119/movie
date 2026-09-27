@@ -65,6 +65,13 @@ export const THEMES = [
   { id: 'space', name: 'うちゅう', emoji: '🪐', price: 2400 },
 ];
 
+/** つぎに なかまにできる子（いちばん安い まだの子）と、あと何コインか */
+export function nextFriendGoal(state) {
+  const f = FRIENDS.filter((x) => !state.friends.includes(x.id)).sort((a, b) => a.price - b.price)[0];
+  if (!f) return null;
+  return { friend: f, need: Math.max(0, f.price - state.coins), progress: Math.min(1, state.coins / f.price), affordable: state.coins >= f.price };
+}
+
 export function buyFriend(state, id) {
   const f = FRIENDS.find((x) => x.id === id);
   if (!f || state.friends.includes(id) || state.coins < f.price) return false;
