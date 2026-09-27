@@ -148,7 +148,7 @@ export function mountQuiz(root, ctx) {
         ${q.hint || q.kind === 'hissan' ? '<button class="hint-btn" data-act="hint">💡 ヒント</button>' : ''}
       </div>
       <div class="qcard__q">${md(q.q)}</div>
-      ${q.big ? `<div class="${bigClass}" ${isEnglish(plainText(q.big)) ? 'lang="en"' : ''}>${md(q.big)}</div>` : ''}
+      ${q.big ? `<div class="${bigClass}" ${subj.id === 'eigo' && isEnglish(plainText(q.big)) ? 'lang="en"' : ''}>${md(q.big)}</div>` : ''}
       ${canSpeak ? '<button class="speak-btn" data-act="speak">🔊 もういちど きく</button>' : ''}
       ${needsTextFallback() ? `<div class="qcard__big en" lang="en">${esc(q.speak)}</div><p class="note">（この端末では読み上げが使えないので、文字で表示しています）</p>` : ''}
       ${q.figure ? `<div class="qcard__figure">${figureSvg(q.figure)}</div>` : ''}
@@ -182,7 +182,8 @@ export function mountQuiz(root, ctx) {
     const texts = q.choices.map((c) => plainText(c));
     const long = texts.some((t) => [...t].length > 9);
     const emojiOnly = texts.every((t) => /^\p{Extended_Pictographic}/u.test(t) && [...t].length <= 3);
-    const sayable = speech.available();
+    const english = subjectOf(q).id === 'eigo';
+    const sayable = english && speech.available();
     $answer.innerHTML = `<div class="choices ${long ? 'choices--list' : 'choices--grid'} ${emojiOnly ? 'choices--emoji' : ''} ${subjectOf(q).id === 'kokugo' && q.kanjiQuiz ? 'choices--kanji' : ''}">
       ${q.choices
         .map((c, i) => {
@@ -190,7 +191,7 @@ export function mountQuiz(root, ctx) {
           return `<div class="choice-wrap">
             <button type="button" class="choice" data-act="choice" data-i="${i}">
               <span class="choice__no" aria-hidden="true">${i + 1}</span>
-              <span class="choice__text ${isEnglish(texts[i]) ? 'en' : ''}" ${isEnglish(texts[i]) ? 'lang="en"' : ''}>${md(c)}</span>
+              <span class="choice__text ${isEnglish(texts[i]) ? 'en' : ''}" ${english && isEnglish(texts[i]) ? 'lang="en"' : ''}>${md(c)}</span>
             </button>
             ${eng ? `<button type="button" class="choice-say" data-act="say" data-i="${i}" aria-label="${esc(texts[i])} を読み上げる">🔊</button>` : ''}
           </div>`;
