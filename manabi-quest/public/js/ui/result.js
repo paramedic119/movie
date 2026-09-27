@@ -3,7 +3,7 @@
 import { $, esc, md, onAct, starsHtml } from './dom.js';
 import { openModal } from './modal.js';
 import { STAGE_INFO } from '../game/rewards.js';
-import { startUnitStage, startMix, startReview, startRevenge } from './session.js';
+import { startUnitStage, startMix, startReview, startRevenge, startDaily } from './session.js';
 
 const EX_TEXT = {
   ex1: { name: 'EX 1', mult: 2, lead: '全問せいかい！ 追加テストに ちょうせんできるよ！' },
@@ -27,7 +27,7 @@ export function mountResult(root, ctx) {
     return () => {};
   }
   const { fx, sfx, playtime } = ctx;
-  const subj = ctx.subjectMeta(r.subjectId) ?? { color: '#8a63ff', light: '#efe8ff', emoji: '📒', name: 'ふくしゅう' };
+  const subj = ctx.subjectMeta(r.subjectId) ?? ctx.subjectMeta('review');
   const perfect = r.total > 0 && r.correct === r.total;
   const status = playtime.status();
   const timeUp = status.timeUp;
@@ -62,6 +62,7 @@ export function mountResult(root, ctx) {
       }
       ${r.nextEx && timeUp ? '<div class="card notice">⏰ きょうの時間は おわり。EXステージは また あした ちょうせんしよう！</div>' : ''}
       ${r.stageKind === 'ex3' && perfect ? '<div class="card master-panel">👑 この単元の「マスター」になったよ！ 単元えらびの画面に 王かんが つくよ。</div>' : ''}
+      ${r.dailyFirst ? '<div class="card notice">🌟 きょうの5教科チャレンジ クリア！ また あした ちょうせんしてね。</div>' : ''}
       ${r.mastered.length ? `<div class="card notice">🎉 まちがいノートの問題を <b>${r.mastered.length}</b> もん「おぼえた！」</div>` : ''}
       ${r.newFriends
         .map((f) => `<div class="card notice new-friend"><span class="big-emoji">${f.emoji}</span> ひみつのなかま「${esc(f.name)}」が なかまになった！</div>`)
@@ -133,6 +134,7 @@ export function mountResult(root, ctx) {
 
   function retry() {
     if (r.stageKind === 'review') return startReview(ctx);
+    if (r.stageKind === 'daily') return startDaily(ctx);
     if (r.stageKind === 'mix') return startMix(ctx, r.subjectId);
     if (homeUnit) return startUnitStage(ctx, { unitId: homeUnit.id, stageKind: 'normal' });
     return ctx.go('#/');

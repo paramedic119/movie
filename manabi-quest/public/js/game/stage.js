@@ -91,6 +91,24 @@ export function buildMixStage({ units, rng, qstats = {} }) {
   return rng.shuffle(out).sort((a, b) => a.level - b.level);
 }
 
+/** きょうの5教科：教科ごとに1問ずつ（いろいろな教科をまぜて練習する） */
+export function buildDailyStage({ unitsBySubject, rng, qstats = {} }) {
+  const info = STAGE_INFO.daily;
+  const used = new Set();
+  const out = [];
+  unitsBySubject.forEach((units, i) => {
+    if (!units.length) return;
+    const unit = rng.pick(units);
+    const level = info.levels[i] ?? 2;
+    const q = unit.generate ? fromGenerator(unit, level, rng, used) : fromBank(unit.questions, level, rng, used, qstats);
+    if (q) {
+      used.add(q.id);
+      out.push(prepareForPlay(q, rng));
+    }
+  });
+  return out;
+}
+
 /** まちがいノートの問題でステージを作る */
 export function buildReviewStage({ entries, rng, count = STAGE_INFO.review.count }) {
   return entries.slice(0, count).map((e) => prepareForPlay({ ...e.q, fromNotebook: true }, rng));

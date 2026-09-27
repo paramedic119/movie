@@ -1,6 +1,6 @@
 // まなびクエスト：アプリの起動と画面の切りかえ
 
-import { SUBJECTS, subjectById, loadAllSubjects } from './data/subjects.js';
+import { SUBJECTS, MODE_META, subjectById, loadAllSubjects } from './data/subjects.js';
 import { createStore, pruneDays } from './game/state.js';
 import { createPlaytime } from './game/playtime.js';
 import { createRng } from './lib/rng.js';
@@ -62,7 +62,7 @@ async function boot() {
     lastResult: null,
     sfx,
     speech,
-    subjectMeta: (id) => subjectById(id),
+    subjectMeta: (id) => subjectById(id) ?? MODE_META[id],
     unitById: (id) => unitIndex.get(id),
     questionById: (id) => questionIndex.get(id),
     effectsLevel: () => store.state.settings.effects,

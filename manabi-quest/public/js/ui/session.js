@@ -1,6 +1,6 @@
 // ステージを始める（問題をえらんでクイズ画面へ）
 
-import { buildStage, buildMixStage, buildReviewStage, prepareForPlay } from '../game/stage.js';
+import { buildStage, buildMixStage, buildReviewStage, buildDailyStage, prepareForPlay } from '../game/stage.js';
 import { dueEntries } from '../game/review.js';
 import { toast } from './modal.js';
 
@@ -62,6 +62,12 @@ export function startReview(ctx) {
   });
   const questions = buildReviewStage({ entries, rng: ctx.rng });
   return begin(ctx, { subjectId: 'review', unitTitle: 'まちがいノート', stageKind: 'review', questions });
+}
+
+export function startDaily(ctx) {
+  const unitsBySubject = ctx.SUBJECTS.map((subj) => ctx.subjects[subj.id]?.units ?? []);
+  const questions = buildDailyStage({ unitsBySubject, rng: ctx.rng, qstats: ctx.store.state.qstats });
+  return begin(ctx, { subjectId: 'daily', unitTitle: 'きょうの5教科チャレンジ', stageKind: 'daily', questions });
 }
 
 /** まちがえた問題にもう一度（その場でのやり直し） */

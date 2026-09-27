@@ -11,6 +11,12 @@ export const SUBJECTS = [
   { id: 'eigo', name: '英語', yomi: 'えいご', emoji: '🔤', color: '#8a63ff', light: '#e9e1ff' },
 ];
 
+/** 教科をまたぐモード（ふくしゅう・きょうの5教科）の表示用 */
+export const MODE_META = {
+  review: { id: 'review', name: 'ふくしゅう', yomi: 'ふくしゅう', emoji: '📒', color: '#8a63ff', light: '#efe8ff' },
+  daily: { id: 'daily', name: 'きょうの5教科', yomi: 'きょうのごきょうか', emoji: '🌟', color: '#f08c00', light: '#fff1d6' },
+};
+
 export const subjectById = (id) => SUBJECTS.find((s) => s.id === id);
 
 // 問題バンク（国語・理科・社会・英語）は教科ごとのファイル。

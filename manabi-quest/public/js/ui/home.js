@@ -4,8 +4,8 @@ import { esc, onAct, minutesText } from './dom.js';
 import { titleFor } from '../game/rewards.js';
 import { dueEntries } from '../game/review.js';
 import { friendById } from '../game/shop.js';
-import { remainingSeconds, dayRecord, unitMastery } from '../game/state.js';
-import { startReview } from './session.js';
+import { remainingSeconds, dayRecord, unitMastery, dateKey } from '../game/state.js';
+import { startReview, startDaily } from './session.js';
 import { openModal } from './modal.js';
 import { withCommas } from '../lib/numfmt.js';
 
@@ -45,6 +45,7 @@ export function mountHome(root, ctx) {
   const limitMin = st.settings.limitMin;
   const usedMin = Math.floor(today.sec / 60);
   const greeting = GREETINGS[Math.floor(now / 60000) % GREETINGS.length];
+  const dailyDone = st.daily?.date === dateKey(now) && st.daily.cleared;
 
   const subjectCards = ctx.SUBJECTS.map((subj) => {
     const units = ctx.subjects[subj.id]?.units ?? [];
@@ -82,6 +83,12 @@ export function mountHome(root, ctx) {
           : ''
       }
 
+      <button class="daily-cta ${dailyDone ? 'done' : ''}" data-act="daily">
+        <span class="daily-cta__icon" aria-hidden="true">${dailyDone ? '✅' : '🌟'}</span>
+        <span class="daily-cta__text"><b>きょうの5教科チャレンジ</b><small>${dailyDone ? 'きょうは クリアずみ！ れんしゅうは なんどでも OK' : '5教科から1問ずつ。全問せいかいで ボーナス＋50'}</small></span>
+        <span class="daily-cta__go" aria-hidden="true">▶</span>
+      </button>
+
       <h2 class="section-title">きょうかを えらぼう</h2>
       <div class="subject-grid">${subjectCards}</div>
 
@@ -108,6 +115,7 @@ export function mountHome(root, ctx) {
   return onAct(root, {
     subject: (el) => ctx.go(`#/subject/${el.dataset.id}`),
     review: () => startReview(ctx),
+    daily: () => startDaily(ctx),
     partner: (el) => {
       ctx.sfx.tap();
       ctx.fx.hop([el]);

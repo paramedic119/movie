@@ -140,6 +140,22 @@ test('まちがえた問題はノートに入り、ふくしゅうで1だんか�
   await context.close();
 });
 
+test('きょうの5教科チャレンジ：5教科から1問ずつ、ボーナスは1日1回', async () => {
+  const { page, context } = await openApp();
+  await page.click('.daily-cta');
+  const subjects = [];
+  for (let i = 0; i < 5; i += 1) subjects.push((await answer(page, true)).subject);
+  await page.waitForFunction(() => location.hash === '#/result');
+  assert.deepEqual([...new Set(subjects)].sort(), ['eigo', 'kokugo', 'rika', 'sansu', 'shakai']);
+  assert.ok(await page.$('.notice'), 'クリアのお知らせ');
+  const first = await page.evaluate(() => globalThis.__mq.lastResult.bonus);
+  assert.equal(first, 50);
+  await page.click('[data-act="retry"]');
+  await playStage(page, 5);
+  assert.equal(await page.evaluate(() => globalThis.__mq.lastResult.bonus), 0, '2回目はボーナスなし');
+  await context.close();
+});
+
 test('リベンジ：まちがえた問題に その場で もういちど', async () => {
   const { page, context } = await openApp();
   await page.click('.subject-card[data-id="sansu"]');

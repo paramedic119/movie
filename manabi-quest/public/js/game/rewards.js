@@ -10,6 +10,7 @@ export const STAGE_INFO = {
   ex2: { label: 'EX 2', count: 3, mult: 3, levels: [3, 3, 3] },
   ex3: { label: 'EX 3', count: 3, mult: 5, levels: [3, 3, 3] },
   mix: { label: 'ミックス', count: 5, mult: 1.2, levels: [1, 1, 2, 2, 3] },
+  daily: { label: 'きょうの5教科', count: 5, mult: 1.5, levels: [1, 2, 2, 2, 2] },
   review: { label: 'ふくしゅう', count: 5, mult: 1.5, levels: [] },
   revenge: { label: 'リベンジ', count: 5, mult: 0.5, levels: [] },
 };
@@ -39,7 +40,7 @@ export function coinsForAnswer({ stageKind, combo, usedHint = false }) {
 export function stageBonus(stageKind, correct, total) {
   const perfect = total > 0 && correct === total;
   if (!perfect) return 0;
-  return { normal: 30, ex1: 60, ex2: 120, ex3: 300, mix: 40, review: 30, revenge: 0 }[stageKind] ?? 0;
+  return { normal: 30, ex1: 60, ex2: 120, ex3: 300, mix: 40, daily: 50, review: 30, revenge: 0 }[stageKind] ?? 0;
 }
 
 /** ★の数（0〜3） */

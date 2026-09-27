@@ -33,6 +33,7 @@ export function defaultState({ reducedMotion = false } = {}) {
     extra: { date: '', min: 0 },
     pin: null,
     achievements: {},
+    daily: { date: '', cleared: false },
     seenGuide: false,
   };
 }

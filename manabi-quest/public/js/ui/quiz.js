@@ -7,7 +7,7 @@ import { openModal } from './modal.js';
 import { normalizeNumber, groupBy4, withCommas } from '../lib/numfmt.js';
 import { plainText } from '../lib/markup.js';
 import { coinsForAnswer, comboMultiplier, stageBonus, starsFor, STAGE_INFO, nextExStage } from '../game/rewards.js';
-import { recordAnswer, recordStage, addCoins } from '../game/state.js';
+import { recordAnswer, recordStage, addCoins, dateKey } from '../game/state.js';
 import { friendById, unlockSecretFriends } from '../game/shop.js';
 
 const LEVEL_TAG = { 1: 'きほん', 2: 'ひょうじゅん', 3: 'チャレンジ' };
@@ -22,7 +22,8 @@ export function mountQuiz(root, ctx) {
     return () => {};
   }
   const { fx, sfx, speech, store } = ctx;
-  const titleSubject = ctx.subjectMeta(s.subjectId) ?? { name: 'ふくしゅう', emoji: '📒', color: '#8a63ff', light: '#efe8ff' };
+  const titleSubject = ctx.subjectMeta(s.subjectId) ?? ctx.subjectMeta('review');
+  const crossSubject = s.subjectId === 'review' || s.subjectId === 'daily';
   const friends = [store.state.partner, ...store.state.friends.filter((f) => f !== store.state.partner)].slice(0, 5).map(friendById);
 
   let q = null;
@@ -113,7 +114,7 @@ export function mountQuiz(root, ctx) {
     $card.innerHTML = `
       <div class="qcard__head">
         <span class="level-tag lv${q.level}">${LEVEL_TAG[q.level] ?? ''}</span>
-        ${s.subjectId === 'review' ? `<span class="subj-mini" style="--c:${subj.color}">${subj.emoji} ${esc(subj.name)}</span>` : ''}
+        ${crossSubject ? `<span class="subj-mini" style="--c:${subj.color}">${subj.emoji} ${esc(subj.name)}</span>` : ''}
         ${q.hint || q.kind === 'hissan' ? '<button class="hint-btn" data-act="hint">💡 ヒント</button>' : ''}
       </div>
       <div class="qcard__q">${md(q.q)}</div>
@@ -376,10 +377,18 @@ export function mountQuiz(root, ctx) {
     const correct = s.results.filter((r) => r.correct).length;
     const total = s.results.length;
     const stars = starsFor(correct, total);
-    const bonus = stageBonus(s.stageKind, correct, total);
+    let bonus = stageBonus(s.stageKind, correct, total);
     let rec = { newStars: false, newEx: false };
     let newFriends = [];
+    let dailyFirst = false;
     store.update((st) => {
+      if (s.stageKind === 'daily') {
+        // きょうの5教科のボーナスは 1日1回（全問せいかいしたとき）
+        const today = dateKey(now);
+        dailyFirst = bonus > 0 && !(st.daily.date === today && st.daily.cleared);
+        if (!dailyFirst) bonus = 0;
+        if (dailyFirst) st.daily = { date: today, cleared: true };
+      }
       rec = recordStage(st, { unitId: s.unitId, stageKind: s.stageKind, correct, total, stars });
       addCoins(st, bonus, now);
       newFriends = unlockSecretFriends(st, ctx.friendCtx());
@@ -403,6 +412,7 @@ export function mountQuiz(root, ctx) {
       newStars: rec.newStars,
       newEx: rec.newEx,
       newFriends,
+      dailyFirst,
       nextEx: perfect && s.unitId ? nextExStage(s.stageKind) : null,
       chain: perfect ? { combo: s.combo, maxCombo: s.maxCombo, chainCoins: s.chainCoins, used: s.used } : null,
       chainCoins: s.chainCoins,

@@ -351,6 +351,27 @@ body[data-theme='space'] .subject-lead { color: #fff; text-shadow: 0 2px 0 var(-
 .review-cta__text small { font-size: 13px; }
 .review-cta__go { font-size: 22px; }
 
+.daily-cta {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  padding: 10px 16px;
+  margin: 8px 0 0;
+  border: 3px solid var(--ink);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  background: linear-gradient(135deg, #fff1d6, #ffe0b3);
+}
+.daily-cta:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--ink); }
+.daily-cta.done { background: #fff; }
+.daily-cta__icon { font-size: 30px; }
+.daily-cta__text { flex: 1; display: flex; flex-direction: column; }
+.daily-cta__text b { font-size: 17px; }
+.daily-cta__text small { font-size: 12px; }
+.daily-cta__go { font-size: 20px; }
+
 .subject-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
 .subject-card {
   position: relative;
@@ -1022,6 +1043,19 @@ body[data-effects='calm'] .feedback { animation: fade-in 0.2s; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}
+
+/* 横長の大きな画面（タブレットの横向き・パソコン）：問題カードと答えるところを左右にならべる */
+@media (min-width: 900px) and (orientation: landscape) {
+  body[data-mode='quiz'] .app { max-width: 1080px; }
+  .quiz { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); column-gap: 28px; align-items: start; }
+  .quiz-top, .quiz-status, .cheer, .combo { grid-column: 1 / -1; }
+  .qcard { grid-column: 1; margin-top: 22px; }
+  .answer { grid-column: 2; margin-top: 22px; }
+  .quiz .keypad { max-width: none; }
+  .quiz .key { min-height: 64px; }
+  .quiz.answered .answer { padding-bottom: 0; }
+  .feedback { width: min(720px, 100%); }
 }
 
 /* せまい画面（小さめのスマホ） */

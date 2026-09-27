@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { comboMultiplier, coinsForAnswer, starsFor, stageBonus, titleFor, nextExStage, TITLES } from '../public/js/game/rewards.js';
 import { addMistake, recordReview, dueEntries, startOfDay, DAY_MS, NOTEBOOK_LIMIT } from '../public/js/game/review.js';
-import { buildStage, buildMixStage, buildReviewStage, questionWeight } from '../public/js/game/stage.js';
+import { buildStage, buildMixStage, buildReviewStage, buildDailyStage, questionWeight } from '../public/js/game/stage.js';
 import { createStore, recordAnswer, recordStage, remainingSeconds, dateKey, mergeWithDefaults, defaultState, STORAGE_KEY } from '../public/js/game/state.js';
 import { buyFriend, buyTheme, unlockSecretFriends, FRIENDS, THEMES } from '../public/js/game/shop.js';
 import { createPlaytime } from '../public/js/game/playtime.js';
@@ -125,6 +125,17 @@ test('ミックスとふくしゅうのステージ', () => {
   const review = buildReviewStage({ entries, rng });
   assert.equal(review.length, 5);
   assert.ok(review.every((q) => q.fromNotebook));
+});
+
+test('きょうの5教科：教科ごとに1問ずつ', () => {
+  const rng = createRng(11);
+  const subjects = ['kokugo', 'sansu', 'rika', 'shakai', 'eigo'].map((sid) => [
+    { ...bankUnit(`${sid}-a`), subject: sid, questions: bankUnit(`${sid}-a`).questions.map((q) => ({ ...q, subject: sid })) },
+  ]);
+  const daily = buildDailyStage({ unitsBySubject: subjects, rng });
+  assert.equal(daily.length, 5);
+  assert.deepEqual(daily.map((q) => q.subject), ['kokugo', 'sansu', 'rika', 'shakai', 'eigo']);
+  assert.equal(stageBonus('daily', 5, 5), 50);
 });
 
 test('保存：読みこみ・こわれたデータ・初期値でうめる', () => {
