@@ -6,7 +6,25 @@ import { dueEntries } from '../game/review.js';
 import { friendById } from '../game/shop.js';
 import { remainingSeconds, dayRecord, unitMastery } from '../game/state.js';
 import { startReview } from './session.js';
+import { openModal } from './modal.js';
 import { withCommas } from '../lib/numfmt.js';
+
+function showGuide(ctx) {
+  const limit = ctx.store.state.settings.limitMin;
+  return openModal({
+    title: '🐘 まなびクエストへ ようこそ！',
+    body: `<ol class="guide-list">
+      <li><b>きょうか</b>と<b>単元</b>をえらんで、5問にちょうせん！</li>
+      <li>せいかいで <span class="coin" aria-hidden="true"></span>コイン。つづけてせいかいすると、どんどんふえるよ。</li>
+      <li><b>5問 全問せいかい</b>で <b>EXステージ</b>（追加テスト）が出てくる！</li>
+      <li>まちがえた問題は <b>📒ノート</b>で ふくしゅうしよう。</li>
+      <li>コインで <b>🐾なかま</b>を ふやそう。</li>
+    </ol>
+    <p class="small muted">${limit ? `1日に あそべる時間は ${limit}分だよ。` : ''}おうちの人は「👪おうちの人」から 時間や音の せっていが できます。</p>`,
+    actions: [{ label: 'はじめる！', value: true, variant: 'primary' }],
+    className: 'modal--guide',
+  });
+}
 
 const GREETINGS = [
   'きょうも いっしょに がんばろう！',
@@ -79,6 +97,13 @@ export function mountHome(root, ctx) {
         </div>
       </div>
     </section>`;
+
+  if (!st.seenGuide) {
+    ctx.store.update((state) => {
+      state.seenGuide = true;
+    });
+    setTimeout(() => showGuide(ctx), 300);
+  }
 
   return onAct(root, {
     subject: (el) => ctx.go(`#/subject/${el.dataset.id}`),

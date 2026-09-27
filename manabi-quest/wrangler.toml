@@ -1,0 +1,4 @@
+# Cloudflare Pages の設定（npx wrangler pages deploy で使われます）
+name = "manabi-quest"
+pages_build_output_dir = "./public"
+compatibility_date = "2025-09-01"

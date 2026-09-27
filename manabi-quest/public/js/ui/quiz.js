@@ -30,7 +30,6 @@ export function mountQuiz(root, ctx) {
   let usedHint = false;
   let hissan = null;
   let fields = null; // { values: string[], active: number }
-  let busy = false;
 
   root.innerHTML = `
     <section class="quiz" style="--c:${titleSubject.color};--l:${titleSubject.light}">
@@ -118,9 +117,9 @@ export function mountQuiz(root, ctx) {
         ${q.hint || q.kind === 'hissan' ? '<button class="hint-btn" data-act="hint">💡 ヒント</button>' : ''}
       </div>
       <div class="qcard__q">${md(q.q)}</div>
-      ${q.big ? `<div class="${bigClass}">${md(q.big)}</div>` : ''}
+      ${q.big ? `<div class="${bigClass}" ${isEnglish(plainText(q.big)) ? 'lang="en"' : ''}>${md(q.big)}</div>` : ''}
       ${canSpeak ? '<button class="speak-btn" data-act="speak">🔊 もういちど きく</button>' : ''}
-      ${needsTextFallback() ? `<div class="qcard__big en">${esc(q.speak)}</div><p class="note">（この端末では読み上げが使えないので、文字で表示しています）</p>` : ''}
+      ${needsTextFallback() ? `<div class="qcard__big en" lang="en">${esc(q.speak)}</div><p class="note">（この端末では読み上げが使えないので、文字で表示しています）</p>` : ''}
       ${q.figure ? `<div class="qcard__figure">${figureSvg(q.figure)}</div>` : ''}
       <div class="qcard__hint" id="hint" hidden></div>
       ${q.kind === 'input' ? '<div class="fields" id="fields"></div>' : ''}
@@ -160,7 +159,7 @@ export function mountQuiz(root, ctx) {
           return `<div class="choice-wrap">
             <button type="button" class="choice" data-act="choice" data-i="${i}">
               <span class="choice__no" aria-hidden="true">${i + 1}</span>
-              <span class="choice__text ${isEnglish(texts[i]) ? 'en' : ''}">${md(c)}</span>
+              <span class="choice__text ${isEnglish(texts[i]) ? 'en' : ''}" ${isEnglish(texts[i]) ? 'lang="en"' : ''}>${md(c)}</span>
             </button>
             ${eng ? `<button type="button" class="choice-say" data-act="say" data-i="${i}" aria-label="${esc(texts[i])} を読み上げる">🔊</button>` : ''}
           </div>`;
@@ -191,7 +190,6 @@ export function mountQuiz(root, ctx) {
     answered = false;
     usedHint = false;
     hissan = null;
-    busy = false;
     $feedback.hidden = true;
     $feedback.innerHTML = '';
     root.querySelector('.quiz').classList.remove('answered');
@@ -324,7 +322,7 @@ export function mountQuiz(root, ctx) {
   // ---------- 入力 ----------
 
   function pressKey(k) {
-    if (answered || busy) return;
+    if (answered) return;
     if (q.kind === 'hissan') {
       if (/^\d$/.test(k)) hissan.input(k);
       return;
@@ -488,6 +486,13 @@ export function mountQuiz(root, ctx) {
     }
   };
   document.addEventListener('keydown', onKey);
+  // 読み上げが使えないとわかったら、英語を文字で出しなおす
+  const offSpeechFail = speech.onFail(() => {
+    if (q && !answered && q.speak && q.kind === 'choice') {
+      renderCard();
+      renderChoices();
+    }
+  });
 
   // テスト用：いまの問題の答えを外から見られるようにする（?debug のときだけ）
   if (ctx.debug) {
@@ -505,6 +510,7 @@ export function mountQuiz(root, ctx) {
 
   return () => {
     offAct();
+    offSpeechFail();
     document.removeEventListener('keydown', onKey);
     speech.cancel();
     if (ctx.debug) delete globalThis.__mqQuiz;

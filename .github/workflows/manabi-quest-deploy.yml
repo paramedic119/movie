@@ -1,0 +1,56 @@
+# まなびクエストを手動でデプロイする（GitHub の Actions タブ → Run workflow）
+# 必要なシークレット（Settings → Secrets and variables → Actions）:
+#   Cloudflare Pages: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
+#   Firebase Hosting: FIREBASE_SERVICE_ACCOUNT（サービスアカウントの JSON）, FIREBASE_PROJECT_ID
+name: まなびクエスト デプロイ
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'デプロイ先'
+        required: true
+        default: cloudflare
+        type: choice
+        options:
+          - cloudflare
+          - firebase
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: manabi-quest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: テスト
+        run: |
+          npm ci
+          npm run check
+          npm test
+      - name: Cloudflare Pages へデプロイ
+        if: inputs.target == 'cloudflare'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: manabi-quest
+          # はじめての時はプロジェクトを作る（すでにあれば何もしない）
+          preCommands: npx wrangler pages project create manabi-quest --production-branch main || true
+          command: pages deploy public --project-name manabi-quest --branch main
+      - name: Firebase Hosting へデプロイ
+        if: inputs.target == 'firebase'
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: ${{ secrets.FIREBASE_PROJECT_ID }}
+          channelId: live
+          entryPoint: manabi-quest

@@ -43,7 +43,13 @@ async function boot() {
 
   const subjects = await loadAllSubjects();
   const unitIndex = new Map();
-  for (const s of Object.values(subjects)) for (const u of s.units) unitIndex.set(u.id, u);
+  const questionIndex = new Map();
+  for (const s of Object.values(subjects)) {
+    for (const u of s.units) {
+      unitIndex.set(u.id, u);
+      for (const q of u.questions ?? []) questionIndex.set(q.id, q);
+    }
+  }
 
   const ctx = {
     debug,
@@ -58,14 +64,20 @@ async function boot() {
     speech,
     subjectMeta: (id) => subjectById(id),
     unitById: (id) => unitIndex.get(id),
+    questionById: (id) => questionIndex.get(id),
     effectsLevel: () => store.state.settings.effects,
     friendCtx: () => ({
       subjectIds: SUBJECTS.map((s) => s.id),
       unitIdsBySubject: Object.fromEntries(Object.entries(subjects).map(([id, s]) => [id, s.units.map((u) => u.id)])),
     }),
     go(hash) {
-      if (location.hash === hash) render();
-      else location.hash = hash;
+      routeHash = hash;
+      try {
+        if (location.hash !== hash) history.pushState(null, '', hash);
+      } catch {
+        // 埋めこみ表示などで URL を変えられなくても、画面は切りかえる
+      }
+      render();
     },
     applyTheme() {
       document.body.dataset.theme = store.state.theme;
@@ -105,8 +117,9 @@ async function boot() {
   }
 
   let unmount = () => {};
+  let routeHash = location.hash || '#/';
   function parseHash() {
-    const parts = location.hash.replace(/^#\/?/, '').split('/');
+    const parts = routeHash.replace(/^#\/?/, '').split('/');
     const name = parts[0] ?? '';
     const params = {};
     if (name === 'subject') params.id = parts[1];
@@ -121,7 +134,12 @@ async function boot() {
     if (status.timeUp && !ROUTES[name].allowWhenTimeUp && !['play', 'result'].includes(name)) {
       name = 'rest';
       params = {};
-      if (location.hash !== '#/rest') history.replaceState(null, '', '#/rest');
+      routeHash = '#/rest';
+      try {
+        if (location.hash !== '#/rest') history.replaceState(null, '', '#/rest');
+      } catch {
+        /* URL を変えられない環境 */
+      }
     }
     const route = ROUTES[name];
     unmount();
@@ -149,7 +167,19 @@ async function boot() {
   ctx.applyTheme();
   ctx.applySettings();
   ctx.playtime.start();
-  window.addEventListener('hashchange', render);
+  const syncFromLocation = () => {
+    routeHash = location.hash || '#/';
+    render();
+  };
+  window.addEventListener('hashchange', syncFromLocation);
+  window.addEventListener('popstate', syncFromLocation);
+  // アプリの中のリンク（#/…）は自分で画面を切りかえる
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest('a[href^="#/"]');
+    if (!a || e.defaultPrevented || e.metaKey || e.ctrlKey) return;
+    e.preventDefault();
+    ctx.go(a.getAttribute('href'));
+  });
   render();
   document.body.classList.add('ready');
 

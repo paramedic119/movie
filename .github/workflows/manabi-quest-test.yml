@@ -1,0 +1,37 @@
+name: まなびクエスト テスト
+
+on:
+  push:
+    paths:
+      - 'manabi-quest/**'
+      - '.github/workflows/manabi-quest-test.yml'
+  pull_request:
+    paths:
+      - 'manabi-quest/**'
+      - '.github/workflows/manabi-quest-test.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: manabi-quest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: manabi-quest/package-lock.json
+      - run: npm ci
+      - name: 問題データのチェック
+        run: npm run check
+      - name: ユニットテスト
+        run: npm test
+      - name: ブラウザ（Chromium）の準備
+        run: npx playwright-core install --with-deps chromium
+      - name: ブラウザでの通しテスト
+        run: npm run e2e

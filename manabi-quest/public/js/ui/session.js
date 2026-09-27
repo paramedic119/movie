@@ -55,7 +55,11 @@ export function startMix(ctx, subjectId) {
 }
 
 export function startReview(ctx) {
-  const entries = dueEntries(ctx.store.state.notebook, ctx.now());
+  // 問題データがあとで直されていたら、ノートに保存した古い内容ではなく新しい内容で出す
+  const entries = dueEntries(ctx.store.state.notebook, ctx.now()).map((e) => {
+    const latest = ctx.questionById?.(e.q.id);
+    return latest ? { ...e, q: latest } : e;
+  });
   const questions = buildReviewStage({ entries, rng: ctx.rng });
   return begin(ctx, { subjectId: 'review', unitTitle: 'まちがいノート', stageKind: 'review', questions });
 }

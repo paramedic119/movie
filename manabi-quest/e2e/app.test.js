@@ -26,7 +26,11 @@ after(async () => {
   server?.close();
 });
 
-async function openApp({ width = 390, height = 844, init } = {}) {
+const SEEN_GUIDE = () => {
+  if (!localStorage.getItem('manabi-quest:v1')) localStorage.setItem('manabi-quest:v1', JSON.stringify({ v: 1, seenGuide: true }));
+};
+
+async function openApp({ width = 390, height = 844, init = SEEN_GUIDE } = {}) {
   const context = await browser.newContext({ viewport: { width, height } });
   await context.route(/^https?:\/\/(?!localhost)/, (r) => r.abort());
   if (init) await context.addInitScript(init);
@@ -80,8 +84,11 @@ async function playStage(page, n, correct = true) {
 
 const coins = (page) => page.evaluate(() => globalThis.__mq.store.state.coins);
 
-test('ホーム：5教科がそろっていて、エラーが出ない', async () => {
-  const { page, errors, context } = await openApp();
+test('ホーム：はじめての案内が出て、5教科がそろっていて、エラーが出ない', async () => {
+  const { page, errors, context } = await openApp({ init: null });
+  await page.waitForSelector('.modal--guide');
+  await page.click('.modal--guide .btn--primary');
+  await page.waitForSelector('.modal--guide', { state: 'detached' });
   const cards = await page.$$('.subject-card:not([disabled])');
   assert.equal(cards.length, 5);
   assert.deepEqual(errors, []);
@@ -162,7 +169,7 @@ test('1日の時間になったら「きょうは ここまで」', async () => 
   const init = () => {
     const d = new Date();
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    localStorage.setItem('manabi-quest:v1', JSON.stringify({ v: 1, settings: { limitMin: 15 }, days: { [key]: { sec: 15 * 60, n: 3, c: 2, coins: 30 } } }));
+    localStorage.setItem('manabi-quest:v1', JSON.stringify({ v: 1, seenGuide: true, settings: { limitMin: 15 }, days: { [key]: { sec: 15 * 60, n: 3, c: 2, coins: 30 } } }));
   };
   const { page, context } = await openApp({ init });
   await page.waitForSelector('.rest-card');
@@ -197,7 +204,7 @@ test('おうちの方ページ：暗証番号と設定（演出を おだやか�
 
 test('なかま：コインで買って パートナーにできる', async () => {
   const { page, context } = await openApp({
-    init: () => localStorage.setItem('manabi-quest:v1', JSON.stringify({ v: 1, coins: 500, totalEarned: 500 })),
+    init: () => localStorage.setItem('manabi-quest:v1', JSON.stringify({ v: 1, seenGuide: true, coins: 500, totalEarned: 500 })),
   });
   await page.click('[data-tab="friends"]');
   await page.click('[data-act="buy"][data-id="koala"]');

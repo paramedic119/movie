@@ -2,6 +2,8 @@
 
 let enabled = true;
 let voice = null;
+let broken = false; // 読み上げがエラーになった端末では、文字で表示する
+const failListeners = new Set();
 
 function synth() {
   return globalThis.speechSynthesis ?? null;
@@ -33,7 +35,12 @@ export const speech = {
   },
   /** 読み上げが使えるか（設定でオフのときも false） */
   available() {
-    return enabled && Boolean(synth()) && typeof globalThis.SpeechSynthesisUtterance === 'function';
+    return enabled && !broken && Boolean(synth()) && typeof globalThis.SpeechSynthesisUtterance === 'function';
+  },
+  /** 読み上げが使えないとわかったときに呼ばれる */
+  onFail(fn) {
+    failListeners.add(fn);
+    return () => failListeners.delete(fn);
   },
   speak(text, { rate = 0.85 } = {}) {
     if (!speech.available() || !text) return false;
@@ -44,7 +51,18 @@ export const speech = {
     u.rate = rate;
     u.pitch = 1.05;
     if (voice) u.voice = voice;
-    s.speak(u);
+    u.onerror = (e) => {
+      if (e.error === 'interrupted' || e.error === 'canceled') return;
+      broken = true;
+      failListeners.forEach((fn) => fn(e.error));
+    };
+    try {
+      s.speak(u);
+    } catch {
+      broken = true;
+      failListeners.forEach((fn) => fn('exception'));
+      return false;
+    }
     return true;
   },
   cancel() {
