@@ -102,6 +102,16 @@ test('ステージの問題えらび：レベル・重複なし・EXは同じ流
   for (const q of normal) assert.deepEqual([...q.choices].sort(), [...q.originalChoices].sort());
 });
 
+test('読み上げ専用の問題は、読み上げが使えない端末では出さない', () => {
+  const unit = bankUnit('eigo-l', 5);
+  unit.questions = unit.questions.map((q, i) => (i % 2 === 0 ? { ...q, listenOnly: true, speak: 'dog' } : q));
+  const rng = createRng(21);
+  for (let i = 0; i < 50; i += 1) {
+    const qs = buildStage({ unit, stageKind: 'normal', rng, canUse: (q) => !q.listenOnly });
+    assert.ok(qs.length > 0 && qs.every((q) => !q.listenOnly));
+  }
+});
+
 test('前にまちがえた問題・まだ出ていない問題が出やすい', () => {
   assert.ok(questionWeight({ n: 3, c: 2, last: 0 }) > questionWeight(undefined));
   assert.ok(questionWeight(undefined) > questionWeight({ n: 5, c: 5, last: 1 }));

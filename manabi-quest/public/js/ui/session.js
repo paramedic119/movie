@@ -4,6 +4,9 @@ import { buildStage, buildMixStage, buildReviewStage, buildDailyStage, prepareFo
 import { dueEntries } from '../game/review.js';
 import { toast } from './modal.js';
 
+/** この端末で出せる問題か（読み上げ専用の問題は、読み上げが使えるときだけ） */
+const canUseOn = (ctx) => (q) => !q.listenOnly || ctx.speech.available();
+
 function begin(ctx, { subjectId, unitId = null, homeUnitId = unitId, unitTitle, stageKind, questions, prev = null }) {
   if (!questions.length) {
     toast('いま出せる問題がありません');
@@ -44,29 +47,32 @@ export function startUnitStage(ctx, { unitId, stageKind = 'normal', prev = null 
     qstats: ctx.store.state.qstats,
     used: prev?.used ?? new Set(),
     siblings: ctx.subjects[unit.subject]?.units ?? [],
+    canUse: canUseOn(ctx),
   });
   return begin(ctx, { subjectId: unit.subject, unitId, unitTitle: unit.title, stageKind, questions, prev });
 }
 
 export function startMix(ctx, subjectId) {
   const units = ctx.subjects[subjectId]?.units ?? [];
-  const questions = buildMixStage({ units, rng: ctx.rng, qstats: ctx.store.state.qstats });
+  const questions = buildMixStage({ units, rng: ctx.rng, qstats: ctx.store.state.qstats, canUse: canUseOn(ctx) });
   return begin(ctx, { subjectId, unitTitle: 'ミックスチャレンジ', stageKind: 'mix', questions });
 }
 
 export function startReview(ctx) {
   // 問題データがあとで直されていたら、ノートに保存した古い内容ではなく新しい内容で出す
-  const entries = dueEntries(ctx.store.state.notebook, ctx.now()).map((e) => {
-    const latest = ctx.questionById?.(e.q.id);
-    return latest ? { ...e, q: latest } : e;
-  });
+  const entries = dueEntries(ctx.store.state.notebook, ctx.now())
+    .map((e) => {
+      const latest = ctx.questionById?.(e.q.id);
+      return latest ? { ...e, q: latest } : e;
+    })
+    .filter((e) => canUseOn(ctx)(e.q));
   const questions = buildReviewStage({ entries, rng: ctx.rng });
   return begin(ctx, { subjectId: 'review', unitTitle: 'まちがいノート', stageKind: 'review', questions });
 }
 
 export function startDaily(ctx) {
   const unitsBySubject = ctx.SUBJECTS.map((subj) => ctx.subjects[subj.id]?.units ?? []);
-  const questions = buildDailyStage({ unitsBySubject, rng: ctx.rng, qstats: ctx.store.state.qstats });
+  const questions = buildDailyStage({ unitsBySubject, rng: ctx.rng, qstats: ctx.store.state.qstats, canUse: canUseOn(ctx) });
   return begin(ctx, { subjectId: 'daily', unitTitle: 'きょうの5教科チャレンジ', stageKind: 'daily', questions });
 }
 

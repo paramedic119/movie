@@ -4,7 +4,7 @@
 import { parseMarkup, plainText, textOutsideRuby } from '../../public/js/lib/markup.js';
 import { isKanji, isLearnedBy4th } from '../../public/js/data/kanji-grades.js';
 
-const QUESTION_KEYS = new Set(['id', 'level', 'q', 'big', 'choices', 'answer', 'explain', 'hint', 'speak', 'kanjiQuiz']);
+const QUESTION_KEYS = new Set(['id', 'level', 'q', 'big', 'choices', 'answer', 'explain', 'hint', 'speak', 'listenOnly', 'kanjiQuiz']);
 const UNIT_KEYS = new Set(['id', 'title', 'icon', 'description', 'questions']);
 const KANA_RE = /^[ぁ-ゖァ-ヺー・]+$/u;
 const BANNED_CHOICES = ['すべて', 'どれでもない', '全部正しい', 'ぜんぶ'];
@@ -79,6 +79,9 @@ export function validateSubject(data, subjectId) {
         errors.push(`${w} speak は英語（半角）だけにしてください`);
       }
       if (q.kanjiQuiz !== undefined && typeof q.kanjiQuiz !== 'boolean') errors.push(`${w} kanjiQuiz は true/false`);
+      if (q.listenOnly !== undefined && (typeof q.listenOnly !== 'boolean' || (q.listenOnly && !q.speak))) {
+        errors.push(`${w} listenOnly は true/false で、speak といっしょに使ってください`);
+      }
 
       if (!Array.isArray(q.choices) || q.choices.length < 2 || q.choices.length > 4) {
         errors.push(`${w} choices は2〜4こにしてください`);

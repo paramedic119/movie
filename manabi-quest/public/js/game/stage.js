@@ -33,9 +33,9 @@ function levelOrder(level) {
   return { 1: [1, 2, 3], 2: [2, 1, 3], 3: [3, 2, 1] }[level] ?? [1, 2, 3];
 }
 
-function fromBank(pool, level, rng, used, qstats) {
+function fromBank(pool, level, rng, used, qstats, canUse = () => true) {
   for (const lv of levelOrder(level)) {
-    const candidates = pool.filter((q) => q.level === lv && !used.has(q.id));
+    const candidates = pool.filter((q) => q.level === lv && !used.has(q.id) && canUse(q));
     if (candidates.length) return rng.weighted(candidates, (q) => questionWeight(qstats[q.id]));
   }
   return null;
@@ -50,8 +50,9 @@ function fromBank(pool, level, rng, used, qstats) {
  * @param {Record<string, any>} [p.qstats] 問題ごとの成績
  * @param {Set<string>} [p.used] すでにこの流れで出た問題ID
  * @param {any[]} [p.siblings] 同じ教科のほかの単元（問題が足りないときの予備）
+ * @param {(q:any)=>boolean} [p.canUse] この端末で出せる問題か（読み上げ専用の問題など）
  */
-export function buildStage({ unit, stageKind, rng, qstats = {}, used = new Set(), siblings = [] }) {
+export function buildStage({ unit, stageKind, rng, qstats = {}, used = new Set(), siblings = [], canUse = () => true }) {
   const info = STAGE_INFO[stageKind] ?? STAGE_INFO.normal;
   const usedHere = new Set(used);
   const out = [];
@@ -60,11 +61,11 @@ export function buildStage({ unit, stageKind, rng, qstats = {}, used = new Set()
     if (unit.generate) {
       q = fromGenerator(unit, level, rng, usedHere);
     } else {
-      q = fromBank(unit.questions, level, rng, usedHere, qstats);
+      q = fromBank(unit.questions, level, rng, usedHere, qstats, canUse);
       if (!q) {
         // この単元の問題を出しつくしたら、同じ教科のほかの単元のむずかしい問題から
         const extra = siblings.filter((u) => u.id !== unit.id && u.questions).flatMap((u) => u.questions);
-        q = fromBank(extra, level, rng, usedHere, qstats);
+        q = fromBank(extra, level, rng, usedHere, qstats, canUse);
       }
     }
     if (!q) continue;
@@ -75,14 +76,14 @@ export function buildStage({ unit, stageKind, rng, qstats = {}, used = new Set()
 }
 
 /** 教科ミックス：いろいろな単元から出す */
-export function buildMixStage({ units, rng, qstats = {} }) {
+export function buildMixStage({ units, rng, qstats = {}, canUse = () => true }) {
   const info = STAGE_INFO.mix;
   const used = new Set();
   const out = [];
   const order = rng.shuffle(units);
   info.levels.forEach((level, i) => {
     const unit = order[i % order.length];
-    const q = unit.generate ? fromGenerator(unit, level, rng, used) : fromBank(unit.questions, level, rng, used, qstats);
+    const q = unit.generate ? fromGenerator(unit, level, rng, used) : fromBank(unit.questions, level, rng, used, qstats, canUse);
     if (q) {
       used.add(q.id);
       out.push(prepareForPlay(q, rng));
@@ -92,7 +93,7 @@ export function buildMixStage({ units, rng, qstats = {} }) {
 }
 
 /** きょうの5教科：教科ごとに1問ずつ（いろいろな教科をまぜて練習する） */
-export function buildDailyStage({ unitsBySubject, rng, qstats = {} }) {
+export function buildDailyStage({ unitsBySubject, rng, qstats = {}, canUse = () => true }) {
   const info = STAGE_INFO.daily;
   const used = new Set();
   const out = [];
@@ -100,7 +101,7 @@ export function buildDailyStage({ unitsBySubject, rng, qstats = {} }) {
     if (!units.length) return;
     const unit = rng.pick(units);
     const level = info.levels[i] ?? 2;
-    const q = unit.generate ? fromGenerator(unit, level, rng, used) : fromBank(unit.questions, level, rng, used, qstats);
+    const q = unit.generate ? fromGenerator(unit, level, rng, used) : fromBank(unit.questions, level, rng, used, qstats, canUse);
     if (q) {
       used.add(q.id);
       out.push(prepareForPlay(q, rng));
