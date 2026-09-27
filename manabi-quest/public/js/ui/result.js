@@ -101,35 +101,35 @@ export function mountResult(root, ctx) {
       }
     </section>`;
 
-  // 演出
+  // 演出（画面をはなれたら、まだ出ていない演出は出さない）
+  const timers = [];
+  const later = (fn, ms) => timers.push(setTimeout(fn, ms));
   const totalCoins = r.stageCoins + r.bonus;
-  setTimeout(() => fx.countUp($('#res-coins', root), 0, totalCoins, 900), 200);
+  later(() => fx.countUp($('#res-coins', root), 0, totalCoins, 900), 200);
   if (perfect) {
     sfx.fanfare();
     fx.confetti(r.stageKind === 'ex3' ? 3200 : 1800);
   }
   if (ex) {
-    setTimeout(() => {
+    later(() => {
       sfx.ex();
       fx.banner('EXTRA!', { sub: `${ex.name} かいほう`, variant: 'ex' });
     }, 500);
   } else if (r.stageKind === 'ex3' && perfect) {
-    setTimeout(() => fx.banner('MASTER!', { sub: 'たんげんマスター', variant: 'gold', duration: 1800 }), 500);
+    later(() => fx.banner('MASTER!', { sub: 'たんげんマスター', variant: 'gold', duration: 1800 }), 500);
   }
 
   // ひと休みのお知らせ
   if (!timeUp && status.needBreak) {
-    playtime.breakShown();
-    setTimeout(
-      () =>
-        openModal({
-          title: '🌿 ひと休みしよう',
-          body: `<p>つづけて ${ctx.store.state.settings.breakMin}分 あそんだよ。</p><p>遠くを見て 目を休めたり、のびをしたりしよう。</p>`,
-          actions: [{ label: 'ひと休みした！', value: true, variant: 'primary' }],
-          className: 'modal--break',
-        }),
-      900,
-    );
+    later(() => {
+      playtime.breakShown();
+      openModal({
+        title: '🌿 ひと休みしよう',
+        body: `<p>つづけて ${ctx.store.state.settings.breakMin}分 あそんだよ。</p><p>遠くを見て 目を休めたり、のびをしたりしよう。</p>`,
+        actions: [{ label: 'ひと休みした！', value: true, variant: 'primary' }],
+        className: 'modal--break',
+      });
+    }, 900);
   }
 
   function retry() {
@@ -140,12 +140,16 @@ export function mountResult(root, ctx) {
     return ctx.go('#/');
   }
 
-  return onAct(root, {
+  const offAct = onAct(root, {
     ex: () => startUnitStage(ctx, { unitId: r.unitId, stageKind: r.nextEx, prev: r.chain }),
     revenge: () => startRevenge(ctx, r),
     retry,
     back: () => ctx.go(homeUnit ? `#/subject/${homeUnit.subject}` : r.stageKind === 'review' ? '#/note' : '#/'),
     rest: () => ctx.go('#/rest'),
   });
+  return () => {
+    offAct();
+    timers.forEach(clearTimeout);
+  };
 }
 
