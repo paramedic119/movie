@@ -20,20 +20,21 @@ const FILES = [
   path.join('..', 'index.html'),
 ];
 
-/** 文字列リテラル・テンプレートの中身だけを取り出す（コメントは除く） */
-function literals(src) {
+/**
+ * コメントを除いたソースを、1行ずつ返す。
+ * （文字列だけを取り出すと、テンプレートの中の \`…\` に入った文字を見のがすので、ソース全体を調べる。
+ *   日本語が出てくるのは 文字列・テンプレートの中だけ）
+ */
+function textLines(src) {
   const noComments = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`])\/\/.*$/gm, '$1');
-  const out = [];
-  const re = /'((?:[^'\\\n]|\\.)*)'|"((?:[^"\\\n]|\\.)*)"|`((?:[^`\\]|\\.)*)`/g;
-  for (const m of noComments.matchAll(re)) out.push(m[1] ?? m[2] ?? m[3]);
-  return out;
+  return noComments.split('\n');
 }
 
 test('子ども向けの画面の文字は 4年生までの漢字（またはふりがなつき）', () => {
   const problems = [];
   for (const rel of FILES) {
     const src = readFileSync(path.join(root, rel), 'utf8');
-    const texts = rel.endsWith('.html') ? [src.replace(/<!--[\s\S]*?-->/g, '')] : literals(src);
+    const texts = rel.endsWith('.html') ? src.replace(/<!--[\s\S]*?-->/g, '').split('\n') : textLines(src);
     for (const t of texts) {
       const stripped = t.replace(/\{[^{}|]+\|[^{}|]+\}/g, '').replace(/<ruby>[\s\S]*?<\/ruby>/g, '');
       const bad = [...new Set([...stripped].filter((ch) => isKanji(ch) && !isLearnedBy4th(ch)))];

@@ -122,9 +122,12 @@ function bump(m, to = m.n + 1) {
   return m.done;
 }
 
-/** 1問答えたとき。新しく クリアしたミッションを返す */
-export function missionsOnAnswer(st, now, { correct, combo = 0, golden = false, subject = '', fromNotebook = false }) {
-  if (!correct || st.missions.date !== dateKey(now)) return [];
+/**
+ * 1問答えたとき。新しく クリアしたミッションを返す。
+ * その場のやり直し（リベンジ）は、答えを見たあとなので数えない
+ */
+export function missionsOnAnswer(st, now, { stageKind = 'normal', correct, combo = 0, golden = false, subject = '', fromNotebook = false }) {
+  if (!correct || stageKind === 'revenge' || st.missions.date !== dateKey(now)) return [];
   return st.missions.list.filter((m) => {
     if (m.kind === 'correct') return bump(m);
     if (m.kind === 'combo') return combo >= FEVER_COMBO && bump(m);
@@ -159,11 +162,11 @@ export function missionsOnStage(st, now, { stageKind, stars, perfect, subject = 
 
 /**
  * ミッションのコインを うけとる
- * @returns {{coins:number, bonus:number}} bonus … 3つ ぜんぶ うけとったときの ボーナス（なければ 0）
+ * @returns {{ok:boolean, coins:number, bonus:number}} bonus … 3つ ぜんぶ うけとったときの ボーナス（なければ 0）
  */
 export function claimMission(st, index, now) {
   const m = st.missions.list[index];
-  if (!m || !m.done || m.claimed) return { coins: 0, bonus: 0 };
+  if (!m || !m.done || m.claimed) return { ok: false, coins: 0, bonus: 0 };
   m.claimed = true;
   addCoins(st, m.coins, now);
   let bonus = 0;
@@ -172,7 +175,20 @@ export function claimMission(st, index, now) {
     bonus = ALL_CLEAR_BONUS;
     addCoins(st, bonus, now);
   }
-  return { coins: m.coins, bonus };
+  return { ok: true, coins: m.coins, bonus };
+}
+
+/**
+ * ゴールデン問題が オフになったら、まだの「ゴールデン問題に せいかい」ミッションを、
+ * できるミッションに かえる（できないミッションが のこらないように）
+ */
+export function replaceGoldenMission(st) {
+  const list = st.missions.list;
+  const i = list.findIndex((m) => m.kind === 'golden' && !m.done);
+  const kind = ['perfect', 'combo', 'ex'].find((k) => !list.some((m) => m.kind === k));
+  if (i < 0 || !kind) return false;
+  list[i] = { kind, goal: MISSION_KINDS[kind].goal, coins: MISSION_KINDS[kind].coins, n: 0, done: false, claimed: false, seen: [] };
+  return true;
 }
 
 // ---------- 1週間の がんばりスタンプ（ステージを1つクリアした日に1つ） ----------
@@ -208,6 +224,18 @@ export function weekStamps(st, now) {
 /** つぎの週のボーナス（なければ null） */
 export function nextStampGoal(count) {
   return STAMP_GOALS.find((g) => count < g.days) ?? null;
+}
+
+/**
+ * 今週のうちに まだ とどく つぎのボーナスと、あと何日か（とどかなければ null）。
+ * のこりの日（きょうの分も まだなら 数える）で足りないボーナスは 見せない
+ * @param {{stamped:boolean, today:boolean, future:boolean}[]} days weekStamps の結果
+ */
+export function reachableStampGoal(days) {
+  const count = days.filter((d) => d.stamped).length;
+  const left = days.filter((d) => d.future || (d.today && !d.stamped)).length;
+  const goal = nextStampGoal(count);
+  return goal && goal.days - count <= left ? { ...goal, need: goal.days - count } : null;
 }
 
 /**

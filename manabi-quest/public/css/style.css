@@ -335,7 +335,7 @@ body[data-theme='space'] .review-lead { color: #fff; text-shadow: 0 2px 0 var(--
 .hero__title { font-weight: 800; font-size: 17px; margin-bottom: 4px; }
 .hero__next { font-size: 12px; color: var(--ink-soft); margin-top: 4px; }
 .hero__friend { display: block; margin-top: 2px; font-size: 12px; font-weight: 700; color: var(--ink-soft); text-decoration: none; }
-.hero__friend.ready { color: #e05a00; font-weight: 800; }
+.hero__friend.ready { color: #b34700; font-weight: 800; }
 
 /* きょうの ミッション */
 .missions { padding: 12px 14px; margin-top: 16px; }
@@ -366,7 +366,7 @@ body[data-theme='space'] .review-lead { color: #fff; text-shadow: 0 2px 0 var(--
 .stampcard { padding: 12px 14px; margin-top: 16px; }
 .stampcard__head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 2px 8px; margin-bottom: 8px; }
 .stampcard__head b { font-size: 15px; }
-.stampcard__head small { font-size: 12px; font-weight: 800; color: #e05a00; }
+.stampcard__head small { font-size: 12px; font-weight: 800; color: #b34700; }
 .stampcard__days { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
 .stampcard__days li { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
 .stampcard__label { font-size: 11px; font-weight: 800; color: var(--ink-soft); white-space: nowrap; }
@@ -1326,7 +1326,7 @@ body[data-theme='space'] .combo { color: #fff; }
   animation: fever-spin 3s linear infinite, golden-glow 1.6s ease-in-out infinite;
 }
 .golden-tag { font-size: 12px; font-weight: 800; padding: 0 10px; border-radius: 999px; border: 2px solid #b87800; background: linear-gradient(90deg, #ffe066, #ffc21a); color: #5a3a00; white-space: nowrap; }
-.golden-tag b { color: #c0264f; }
+.golden-tag b { color: #9e1a3f; }
 .fx-float.golden-text { font-size: 30px; color: #fff3a0; }
 .fx-float.rank-text { font-size: 22px; color: #fff; }
 .fx-banner--golden .fx-banner__strip {

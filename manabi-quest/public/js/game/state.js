@@ -166,11 +166,16 @@ export function sanitizeState(st, defaults = defaultState()) {
   return st;
 }
 
+// ミッションの種類（missions.js の MISSION_KINDS と同じ。テストで そろっているか調べる）
+export const MISSION_KIND_IDS = ['stages', 'correct', 'combo', 'perfect', 'golden', 'ex', 'review', 'furikaeri', 'subjects', 'daily', 'subject'];
+
 /** きょうのミッションの記録（形がおかしければ、その日のミッションを作りなおす） */
 function fixMissions(m) {
   const empty = { date: '', list: [], bonus: false };
   if (typeof m.date !== 'string' || !Array.isArray(m.list)) return empty;
-  const list = m.list.filter((x) => isPlainObject(x) && typeof x.kind === 'string' && count(x.goal, 0) >= 1);
+  const list = m.list.filter(
+    (x) => isPlainObject(x) && MISSION_KIND_IDS.includes(x.kind) && count(x.goal, 0) >= 1 && (x.kind !== 'subject' || typeof x.subject === 'string'),
+  );
   if (list.length !== m.list.length || list.length > 5) return empty;
   return {
     date: m.date,

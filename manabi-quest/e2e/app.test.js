@@ -446,6 +446,21 @@ test('たからばこ：★2なら 銀。あと1問で パーフェクトなら�
   await context.close();
 });
 
+test('EXステージで あと1問だったときは「おしい！」を出さない（もういちど は ふつうのステージになるので）', async () => {
+  const { page, context } = await openApp();
+  await noGolden(page);
+  await page.click('.subject-card[data-id="rika"]');
+  await page.click('.unit-card');
+  await playStage(page, 5);
+  await page.click('[data-act="ex"]');
+  await page.waitForSelector('.stage-tag--ex1');
+  await playStage(page, 3, (i) => i !== 0);
+  assert.equal(await page.evaluate(() => globalThis.__mq.lastResult.correct), 2);
+  assert.equal(await page.$('.chip--near'), null);
+  assert.equal(await page.$('.btn--near'), null);
+  await context.close();
+});
+
 test('ミッション：クリアすると知らせて、ホームで うけとる。3つ ぜんぶで ボーナス', async () => {
   const init = (key) => {
     if (localStorage.getItem('manabi-quest:v1')) return;
@@ -476,8 +491,10 @@ test('ミッション：クリアすると知らせて、ホームで うけと�
   await page.click('[data-tab="home"]');
   await page.waitForSelector('.btn--claim');
   const before = await coins(page);
-  await page.click('.btn--claim');
+  await page.focus('.btn--claim');
+  await page.keyboard.press('Enter');
   await page.waitForFunction(() => globalThis.__mq.store.state.missions.bonus === true);
+  assert.equal(await page.evaluate(() => document.activeElement?.closest('#missions') !== null), true, 'キーボードの フォーカスが ミッションに のこる');
   assert.equal((await coins(page)) - before, 20 + 50, 'ミッションの20と コンプリートボーナス50');
   assert.equal(await page.$$eval('.mission.claimed', (els) => els.length), 3);
   assert.match(await page.textContent('.missions__foot'), /コンプリート/);

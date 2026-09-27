@@ -10,6 +10,7 @@ import { coinsForAnswer, comboMultiplier, comboTier, COMBO_TIERS, FEVER_COMBO, c
 import { recordAnswer, recordStage, addCoins, dateKey } from '../game/state.js';
 import { missionsOnAnswer, missionsOnStage, stampDay } from '../game/missions.js';
 import { friendById, unlockSecretFriends } from '../game/shop.js';
+import { refreshMissions } from './session.js';
 
 const LEVEL_TAG = { 1: 'きほん', 2: 'ひょうじゅん', 3: 'チャレンジ' };
 const PRAISE = ['すごい！', 'やったね！', 'そのちょうし！', 'かんぺき！', 'さすが！', 'いいね！', 'ばっちり！'];
@@ -161,7 +162,7 @@ export function mountQuiz(root, ctx) {
       <div class="qcard__q">${md(q.q)}</div>
       ${q.big ? `<div class="${bigClass}" ${subj.id === 'eigo' && isEnglish(plainText(q.big)) ? 'lang="en"' : ''}>${md(q.big)}</div>` : ''}
       ${canSpeak ? '<button class="speak-btn" data-act="speak">🔊 もういちど きく</button>' : ''}
-      ${needsTextFallback() ? `<div class="qcard__big en" lang="en">${esc(q.speak)}</div><p class="note">（この端末では読み上げが使えないので、文字で表示しています）</p>` : ''}
+      ${needsTextFallback() ? `<div class="qcard__big en" lang="en">${esc(q.speak)}</div><p class="note">（この きかいでは 読み上げが 使えないので、文字で 出しているよ）</p>` : ''}
       ${q.figure ? `<div class="qcard__figure">${figureSvg(q.figure)}</div>` : ''}
       <div class="qcard__hint" id="hint" hidden></div>
       ${q.kind === 'input' ? '<div class="fields" id="fields"></div>' : ''}
@@ -306,10 +307,11 @@ export function mountQuiz(root, ctx) {
     const feverEnded = !correct && prevCombo >= FEVER_COMBO;
     let reviewResult = 'none';
     let missions = [];
+    refreshMissions(ctx); // 夜の12時をこえて答えたときは、あたらしい日のミッションに数える
     store.update((st) => {
       reviewResult = recordAnswer(st, q, correct, now);
       addCoins(st, coins, now);
-      missions = missionsOnAnswer(st, now, { correct, combo: s.combo, golden, subject: q.subject, fromNotebook: Boolean(q.fromNotebook) });
+      missions = missionsOnAnswer(st, now, { stageKind: s.stageKind, correct, combo: s.combo, golden, subject: q.subject, fromNotebook: Boolean(q.fromNotebook) });
     });
     if (reviewResult === 'mastered') s.mastered.push(q);
     s.results.push({ q, correct, coins, given, usedHint, golden });
@@ -482,6 +484,7 @@ export function mountQuiz(root, ctx) {
     let dailyFirst = false;
     let stamp = null;
     let stageMissions = [];
+    refreshMissions(ctx);
     store.update((st) => {
       if (s.stageKind === 'daily') {
         // きょうの5教科の たからばこは 1日1回（全問せいかいしたとき）

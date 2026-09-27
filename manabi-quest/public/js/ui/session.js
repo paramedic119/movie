@@ -3,7 +3,7 @@
 import { buildStage, buildMixStage, buildReviewStage, buildDailyStage, prepareForPlay } from '../game/stage.js';
 import { dueEntries } from '../game/review.js';
 import { GOLDEN_RATE, pickGoldenIndex } from '../game/rewards.js';
-import { ensureMissions } from '../game/missions.js';
+import { ensureMissions, replaceGoldenMission } from '../game/missions.js';
 import { dateKey } from '../game/state.js';
 import { toast } from './modal.js';
 import { isGrade4 } from '../data/subjects.js';
@@ -99,6 +99,8 @@ export function missionInfo(ctx) {
 /** 日づけが変わっていたら、きょうのミッションを作る。自動で うけとったコインを返す */
 export function refreshMissions(ctx) {
   const st = ctx.store.state;
+  // ゴールデン問題が オフになっていたら、「ゴールデン問題に せいかい」ミッションは べつのものに
+  if (!st.settings.golden && st.missions.list.some((m) => m.kind === 'golden' && !m.done)) ctx.store.update(replaceGoldenMission);
   if (st.missions.date === dateKey(ctx.now()) && st.missions.list.length) return 0;
   const info = missionInfo(ctx);
   let carried = 0;

@@ -4,7 +4,7 @@ import { $, esc, onAct, minutesText } from './dom.js';
 import { titleFor } from '../game/rewards.js';
 import { friendById, nextFriendGoal } from '../game/shop.js';
 import { remainingSeconds, dayRecord, unitMastery, dateKey } from '../game/state.js';
-import { MISSION_KINDS, ALL_CLEAR_BONUS, STAMP_GOALS, missionText, claimMission, weekStamps, weekStartKey, nextStampGoal } from '../game/missions.js';
+import { MISSION_KINDS, ALL_CLEAR_BONUS, STAMP_GOALS, missionText, claimMission, weekStamps, weekStartKey, reachableStampGoal } from '../game/missions.js';
 import { startReview, startDaily, reviewableEntries, refreshMissions } from './session.js';
 import { openModal, toast } from './modal.js';
 import { isGrade4 } from '../data/subjects.js';
@@ -51,7 +51,7 @@ function missionsHtml(ctx) {
       </li>`;
     })
     .join('');
-  return `<div class="missions__head"><h2>🎯 きょうの ミッション</h2><span class="missions__count">${list.filter((m) => m.done).length}/${list.length}</span></div>
+  return `<div class="missions__head"><h2 tabindex="-1">🎯 きょうの ミッション</h2><span class="missions__count">${list.filter((m) => m.done).length}/${list.length}</span></div>
     <ul class="missions__list">${rows}</ul>
     <p class="missions__foot">${
       st.missions.bonus
@@ -66,10 +66,10 @@ function stampsHtml(ctx) {
   const now = ctx.now();
   const days = weekStamps(st, now);
   const count = days.filter((d) => d.stamped).length;
-  const next = nextStampGoal(count);
+  const next = reachableStampGoal(days);
   const got = st.week.start === weekStartKey(now) ? st.week.got : [];
   const partner = friendById(st.partner);
-  return `<div class="stampcard__head"><b>📅 こんしゅうの がんばりスタンプ</b><small>${next ? `あと ${next.days - count}日で ボーナス` : 'ぜんぶ あつめた！ すごい！'}</small></div>
+  return `<div class="stampcard__head"><b>📅 こんしゅうの がんばりスタンプ</b><small>${next ? `あと ${next.need}日で ボーナス` : count >= 7 ? 'ぜんぶ あつめた！ すごい！' : 'つぎの週も がんばろう！'}</small></div>
     <ol class="stampcard__days" aria-label="こんしゅうの スタンプ ${count}こ">${days
       .map(
         (d) => `<li class="${d.stamped ? 'on' : ''} ${d.today ? 'is-today' : ''} ${d.future ? 'is-future' : ''}" aria-label="${d.label} ${d.stamped ? 'スタンプあり' : 'まだ'}">
@@ -152,7 +152,7 @@ export function mountHome(root, ctx) {
 
       <button class="daily-cta ${dailyDone ? 'done' : ''}" data-act="daily">
         <span class="daily-cta__icon" aria-hidden="true">${dailyDone ? '✅' : '🌟'}</span>
-        <span class="daily-cta__text"><b>きょうの5教科チャレンジ</b><small>${dailyDone ? 'きょうは クリアずみ！ れんしゅうは なんどでも OK' : '5教科から1問ずつ。全問せいかいで ボーナス＋50'}</small></span>
+        <span class="daily-cta__text"><b>きょうの5教科チャレンジ</b><small>${dailyDone ? 'きょうは クリアずみ！ れんしゅうは なんどでも OK' : '5教科から1問ずつ。全問せいかいで たからばこ（1日1回）'}</small></span>
         <span class="daily-cta__go" aria-hidden="true">▶</span>
       </button>
 
@@ -183,14 +183,16 @@ export function mountHome(root, ctx) {
   /** ミッションのコインを うけとる（コインが上のコイン表示へ飛んでいく） */
   function claim(el) {
     const before = ctx.store.state.coins;
-    let res = { coins: 0, bonus: 0 };
+    let res = { ok: false, coins: 0, bonus: 0 };
     ctx.store.update((state) => {
       res = claimMission(state, Number(el.dataset.i), ctx.now());
     });
-    if (!res.coins) return;
+    if (!res.ok) return;
     const { fx, sfx } = ctx;
     const hud = document.getElementById('hud-coins');
     const hudCount = document.getElementById('hud-coin-count');
+    // 上のコイン表示は、コインがとどいてから ふやす（先に ふえた数が出て もどるのを ふせぐ）
+    hudCount.textContent = withCommas(before);
     sfx.chest();
     const c = fx.centerOf(el);
     fx.burst(c.x, c.y);
@@ -203,12 +205,16 @@ export function mountHome(root, ctx) {
         fx.pop(hud);
       }
     });
-    $('#missions', root).innerHTML = missionsHtml(ctx);
+    const card = $('#missions', root);
+    card.innerHTML = missionsHtml(ctx);
     $('.hero__friend-slot', root).innerHTML = friendGoalHtml(ctx.store.state);
+    // キーボードで うけとったときも、つぎの「うけとる」か 見出しに もどる
+    ($('.btn--claim', card) ?? $('h2', card)).focus({ preventScroll: true });
     if (res.bonus) {
       later(() => {
         sfx.levelUp();
         if (ctx.effectsLevel() !== 'calm') fx.banner('ミッション コンプリート！', { sub: `ボーナス ＋${res.bonus}`, variant: 'gold', duration: 1100, pass: true });
+        else toast(`🎉 ミッション コンプリート！ ボーナス ＋${res.bonus}`);
         fx.confetti(1600);
       }, 450);
     }

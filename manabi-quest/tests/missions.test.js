@@ -8,16 +8,18 @@ import {
   missionsOnAnswer,
   missionsOnStage,
   claimMission,
+  replaceGoldenMission,
   missionText,
   stampDay,
   weekStamps,
   weekStartKey,
   nextStampGoal,
+  reachableStampGoal,
   ALL_CLEAR_BONUS,
   MISSION_KINDS,
   STAMP_GOALS,
 } from '../public/js/game/missions.js';
-import { defaultState, mergeWithDefaults, dateKey } from '../public/js/game/state.js';
+import { defaultState, mergeWithDefaults, dateKey, MISSION_KIND_IDS } from '../public/js/game/state.js';
 import { nextFriendGoal } from '../public/js/game/shop.js';
 
 const SUBJECTS = ['kokugo', 'sansu', 'rika', 'shakai', 'eigo'];
@@ -99,6 +101,10 @@ test('ミッション：答えやステージで すすみ、クリアした と
   ans({ fromNotebook: true });
   assert.equal(st.missions.list[2].n, 2);
   assert.deepEqual(ans({ fromNotebook: true }).map((m) => m.kind), ['review']);
+  // その場のやり直し（リベンジ）は 答えを見たあとなので 数えない
+  const before = st.missions.list.map((m) => m.n);
+  assert.deepEqual(ans({ stageKind: 'revenge', fromNotebook: true, combo: 9 }), []);
+  assert.deepEqual(st.missions.list.map((m) => m.n), before);
   // ほかの日づけのミッションは すすまない
   const other = withMissions(['correct'], MON - DAY);
   assert.deepEqual(missionsOnAnswer(other, MON, { correct: true }), []);
@@ -129,15 +135,15 @@ test('ミッション：ステージのクリア（★1つ以上）・パーフ�
 
 test('ミッション：うけとる → 3つ ぜんぶで ボーナス。うけとりわすれは つぎの日に自動で', () => {
   const st = withMissions(['correct', 'combo', 'golden']);
-  assert.deepEqual(claimMission(st, 0, MON), { coins: 0, bonus: 0 }, 'まだ クリアしていない');
+  assert.deepEqual(claimMission(st, 0, MON), { ok: false, coins: 0, bonus: 0 }, 'まだ クリアしていない');
   st.missions.list.forEach((m) => {
     m.n = m.goal;
     m.done = true;
   });
-  assert.deepEqual(claimMission(st, 0, MON), { coins: 20, bonus: 0 });
-  assert.deepEqual(claimMission(st, 0, MON), { coins: 0, bonus: 0 }, '2回は うけとれない');
-  assert.deepEqual(claimMission(st, 1, MON), { coins: 30, bonus: 0 });
-  assert.deepEqual(claimMission(st, 2, MON), { coins: 30, bonus: ALL_CLEAR_BONUS });
+  assert.deepEqual(claimMission(st, 0, MON), { ok: true, coins: 20, bonus: 0 });
+  assert.deepEqual(claimMission(st, 0, MON), { ok: false, coins: 0, bonus: 0 }, '2回は うけとれない');
+  assert.deepEqual(claimMission(st, 1, MON), { ok: true, coins: 30, bonus: 0 });
+  assert.deepEqual(claimMission(st, 2, MON), { ok: true, coins: 30, bonus: ALL_CLEAR_BONUS });
   assert.equal(st.coins, 20 + 30 + 30 + ALL_CLEAR_BONUS);
   assert.equal(st.totalEarned, st.coins);
 
@@ -155,6 +161,38 @@ test('ミッション：うけとる → 3つ ぜんぶで ボーナス。うけ
   const st3 = withMissions(['correct', 'combo', 'golden'], MON - DAY);
   st3.missions.list.forEach((m) => (m.done = true));
   assert.equal(ensureMissions(st3, MON, INFO).carried, 20 + 30 + 30 + ALL_CLEAR_BONUS, 'ぜんぶ クリアしていれば ボーナスも');
+});
+
+test('ミッション：ゴールデン問題がオフになったら、まだの ゴールデンのミッションは できるものに かえる', () => {
+  const st = withMissions(['correct', 'golden', 'review']);
+  assert.equal(replaceGoldenMission(st), true);
+  assert.deepEqual(st.missions.list.map((m) => m.kind), ['correct', 'perfect', 'review']);
+  assert.equal(st.missions.list[1].n, 0);
+  assert.equal(replaceGoldenMission(st), false, 'もうない');
+  const done = withMissions(['correct', 'golden', 'review']);
+  done.missions.list[1].done = true;
+  assert.equal(replaceGoldenMission(done), false, 'クリアずみなら そのまま');
+  const full = withMissions(['perfect', 'golden', 'combo']);
+  assert.equal(replaceGoldenMission(full), true);
+  assert.deepEqual(full.missions.list.map((m) => m.kind), ['perfect', 'ex', 'combo'], '重ならないものに');
+});
+
+test('がんばりスタンプ：ボーナスまで「あと○日」は、今週のうちに とどくときだけ', () => {
+  const st = defaultState();
+  const sat = MON + 5 * DAY;
+  for (const d of [0, 1]) stampDay(st, MON + d * DAY);
+  // 月・火に スタンプ → 土曜日（まだ）：土・日の2日で 3日に とどく
+  assert.deepEqual(reachableStampGoal(weekStamps(st, sat)), { ...STAMP_GOALS[0], need: 1 });
+  stampDay(st, sat);
+  // 月・火・土 → つぎは 5日だが、のこりは 日曜日だけ
+  assert.equal(reachableStampGoal(weekStamps(st, sat)), null);
+  const st2 = defaultState();
+  assert.deepEqual(reachableStampGoal(weekStamps(st2, MON)), { ...STAMP_GOALS[0], need: 3 }, '月曜日は 3日も とどく');
+  assert.equal(reachableStampGoal(weekStamps(st2, MON + 6 * DAY)), null, '日曜日に 0こでは とどかない');
+});
+
+test('ミッションの種類：保存データのチェックと そろっている', () => {
+  assert.deepEqual([...MISSION_KIND_IDS].sort(), Object.keys(MISSION_KINDS).sort());
 });
 
 test('がんばりスタンプ：ステージをクリアした日に1つ。1週間で 3日・5日・7日の ボーナス', () => {
@@ -210,6 +248,10 @@ test('保存データ：ミッション・スタンプ・設定がこわれて�
   assert.equal(half.missions.bonus, false);
   const broken = mergeWithDefaults({ missions: { date: '2026-09-28', list: [{ kind: 'correct' }] } }, defaultState());
   assert.deepEqual(broken.missions.list, [], 'ゴールのないミッションがあれば 作りなおす');
+  const unknown = mergeWithDefaults({ missions: { date: '2026-09-28', list: [{ kind: 'dance', goal: 1, coins: 5 }] } }, defaultState());
+  assert.deepEqual(unknown.missions.list, [], '知らない種類のミッションがあれば 作りなおす');
+  const noSubject = mergeWithDefaults({ missions: { date: '2026-09-28', list: [{ kind: 'subject', goal: 5, coins: 20 }] } }, defaultState());
+  assert.deepEqual(noSubject.missions.list, [], '教科のない「教科」ミッションも 作りなおす');
   // 前の版の記録（ミッションなし）でも ミッションを作れる
   const old = mergeWithDefaults({ coins: 10 }, defaultState());
   assert.equal(ensureMissions(old, now, INFO).fresh, true);

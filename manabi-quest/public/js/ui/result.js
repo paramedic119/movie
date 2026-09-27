@@ -3,7 +3,8 @@
 import { $, $$, esc, md, onAct, starsHtml } from './dom.js';
 import { openModal } from './modal.js';
 import { STAGE_INFO, titleFor, CHEST_RANKS } from '../game/rewards.js';
-import { nextStampGoal } from '../game/missions.js';
+import { reachableStampGoal, weekStamps } from '../game/missions.js';
+import { plainText } from '../lib/markup.js';
 import { friendById, nextFriendGoal } from '../game/shop.js';
 import { withCommas } from '../lib/numfmt.js';
 import { startUnitStage, startMix, startReview, startRevenge, startDaily } from './session.js';
@@ -89,10 +90,11 @@ export function mountResult(root, ctx) {
     T.gauge = Math.max(1900, T.ready + 450);
     T.ex = T.gauge + 600;
   }
-  const nearMiss = !perfect && !timeUp && r.total >= 3 && r.correct === r.total - 1 && r.stageKind !== 'revenge';
+  // 「もういちど」で同じステージに ちょうせんできるときだけ（EX・リベンジは「もういちど」が ふつうのステージになるので出さない）
+  const nearMiss = !perfect && !timeUp && r.total >= 3 && r.correct === r.total - 1 && r.stageKind !== 'revenge' && !r.stageKind.startsWith('ex');
   const partner = friendById(ctx.store.state.partner);
   const stamp = r.stamp?.newStamp ? r.stamp : null;
-  const stampNext = stamp ? nextStampGoal(stamp.count) : null;
+  const stampNext = stamp ? reachableStampGoal(weekStamps(ctx.store.state, ctx.now())) : null;
   const missionsDone = r.missionsDone ?? [];
   const nextFriend = timeUp ? null : nextFriendGoal(ctx.store.state);
   const earnedAfter = r.earnedAfter ?? ctx.store.state.totalEarned;
@@ -114,7 +116,7 @@ export function mountResult(root, ctx) {
           <div class="result-coins"><span class="coin big" aria-hidden="true"></span>＋<b id="res-coins">0</b></div>
           ${
             treasure.rank
-              ? `<button type="button" class="chest chest--r${firstRank}" data-act="chest" disabled aria-label="ボーナスの たからばこを あける">
+              ? `<button type="button" class="chest chest--r${firstRank}" data-act="chest" disabled aria-label="${esc(plainText(CHEST_RANKS[firstRank].name))}を あける">
                   <span class="chest__rays" aria-hidden="true"></span>${CHEST_SVG}<span class="chest__label">${md(CHEST_RANKS[firstRank].name)}</span>
                 </button>`
               : ''
@@ -156,7 +158,7 @@ export function mountResult(root, ctx) {
               <div class="stamp-notice__body">
                 <b>がんばりスタンプ ゲット！</b>
                 <small>こんしゅう ${stamp.count}日目</small>
-                ${stampNext ? `<small>あと ${stampNext.days - stamp.count}日で ボーナス！</small>` : ''}
+                ${stampNext ? `<small>あと ${stampNext.need}日で ボーナス！</small>` : ''}
                 ${stamp.rewards.map((g) => `<span class="stamp-notice__reward">🎁 ${g.days}日 たっせい！ <span class="coin" aria-hidden="true"></span>＋${withCommas(g.coins)}</span>`).join('')}
               </div>
             </div>`
@@ -293,6 +295,7 @@ export function mountResult(root, ctx) {
     if (!el || !step || chestOpen || !mounted) return;
     el.className = el.className.replace(/chest--r\d/, `chest--r${step.rank}`);
     $('.chest__label', el).innerHTML = md(CHEST_RANKS[step.rank].name);
+    el.setAttribute('aria-label', `${plainText(CHEST_RANKS[step.rank].name)}を あける`);
     sfx.rankUp(i - 1);
     fx.pop(el);
     const c = fx.centerOf(el);

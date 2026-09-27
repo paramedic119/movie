@@ -81,7 +81,7 @@ export function mountFriends(root, ctx, params) {
                <h2 class="section-title">ひみつのなかま</h2>
                <p class="hint-text">コインでは 買えない。がんばると なかまになるよ。</p>
                <ul class="friend-grid">${secretCards}</ul>`
-            : `<p class="hint-text">画面の背景を かえられるよ。</p><ul class="theme-grid">${themeCards}</ul>`
+            : `<p class="hint-text">画面の <ruby>背景<rt>はいけい</rt></ruby>を かえられるよ。</p><ul class="theme-grid">${themeCards}</ul>`
         }
       </section>`;
   }
