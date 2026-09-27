@@ -14,19 +14,19 @@ import {
 
 // ---------- 問題を作る小さな道具 ----------
 
-const slug = (...parts) =>
+export const slug = (...parts) =>
   parts
     .join('-')
     .replace(/\./g, 'p')
     .replace(/[^a-z0-9-]/gi, 'x')
     .toLowerCase();
 
-function choiceQ(unit, key, level, { q, big, choices, answer, explain, hint, figure }) {
+export function choiceQ(unit, key, level, { q, big, choices, answer, explain, hint, figure }) {
   return { id: `${unit}-g-${slug(key)}`, level, kind: 'choice', q, big, choices, answer, explain, hint, figure, generated: true };
 }
 
 /** fields: [{ label, answer, suffix, prefix, group4, decimal }] */
-function inputQ(unit, key, level, { q, big, fields, explain, hint, figure }) {
+export function inputQ(unit, key, level, { q, big, fields, explain, hint, figure }) {
   return {
     id: `${unit}-g-${slug(key)}`,
     level,
@@ -43,7 +43,7 @@ function inputQ(unit, key, level, { q, big, fields, explain, hint, figure }) {
 }
 
 /** 選択肢をそろえる（正解＋ちがう値のまちがい選択肢） */
-function withDistractors(rng, answer, candidates, n = 4) {
+export function withDistractors(rng, answer, candidates, n = 4) {
   const out = [answer];
   for (const c of rng.shuffle(candidates)) {
     if (out.length >= n) break;
@@ -52,7 +52,7 @@ function withDistractors(rng, answer, candidates, n = 4) {
   return out;
 }
 
-const OP = { '+': '＋', '-': '−', '*': '×', '/': '÷' };
+export const OP = { '+': '＋', '-': '−', '*': '×', '/': '÷' };
 
 // ---------- 大きな数 ----------
 

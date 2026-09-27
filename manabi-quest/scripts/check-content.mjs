@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 使い方: node scripts/check-content.mjs [kokugo|rika|shakai|eigo ...]
+// 使い方: node scripts/check-content.mjs [kokugo|kokugo-furikaeri|rika|shakai|eigo ...]
 // 問題データの形・答え・漢字の学年（ふりがな）をチェックします。
 
 import { existsSync } from 'node:fs';
@@ -8,7 +8,8 @@ import path from 'node:path';
 import { validateSubject } from './lib/validate-content.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const ALL = ['kokugo', 'rika', 'shakai', 'eigo'];
+export const BANK_FILES = ['kokugo', 'rika', 'shakai', 'eigo'];
+const ALL = BANK_FILES;
 const targets = process.argv.slice(2).length ? process.argv.slice(2) : ALL;
 
 let failed = false;
@@ -27,7 +28,8 @@ for (const subject of targets) {
     failed = true;
     continue;
   }
-  const { errors, warnings, stats } = validateSubject(data, subject);
+  // ファイル名の「-」の前が教科ID（kokugo-furikaeri → kokugo）
+  const { errors, warnings, stats } = validateSubject(data, subject.split('-')[0]);
   const total = stats.reduce((sum, s) => sum + s.total, 0);
   console.log(`\n${errors.length ? '✗' : '✓'} ${subject}: ${stats.length} 単元 / ${total} 問`);
   for (const s of stats) {

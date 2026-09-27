@@ -3,6 +3,7 @@
 import { buildStage, buildMixStage, buildReviewStage, buildDailyStage, prepareForPlay } from '../game/stage.js';
 import { dueEntries } from '../game/review.js';
 import { toast } from './modal.js';
+import { isGrade4 } from '../data/subjects.js';
 
 /** この端末で出せる問題か（読み上げ専用の問題は、読み上げが使えるときだけ） */
 const canUseOn = (ctx) => (q) => !q.listenOnly || ctx.speech.available();
@@ -56,7 +57,7 @@ export function startUnitStage(ctx, { unitId, stageKind = 'normal', prev = null 
 }
 
 export function startMix(ctx, subjectId) {
-  const units = ctx.subjects[subjectId]?.units ?? [];
+  const units = (ctx.subjects[subjectId]?.units ?? []).filter(isGrade4);
   const questions = buildMixStage({ units, rng: ctx.rng, qstats: ctx.store.state.qstats, canUse: canUseOn(ctx) });
   return begin(ctx, { subjectId, unitTitle: 'ミックスチャレンジ', stageKind: 'mix', questions });
 }
@@ -78,7 +79,7 @@ export function startReview(ctx) {
 }
 
 export function startDaily(ctx) {
-  const unitsBySubject = ctx.SUBJECTS.map((subj) => ctx.subjects[subj.id]?.units ?? []);
+  const unitsBySubject = ctx.SUBJECTS.map((subj) => (ctx.subjects[subj.id]?.units ?? []).filter(isGrade4));
   const questions = buildDailyStage({ unitsBySubject, rng: ctx.rng, qstats: ctx.store.state.qstats, canUse: canUseOn(ctx) });
   return begin(ctx, { subjectId: 'daily', unitTitle: 'きょうの5教科チャレンジ', stageKind: 'daily', questions });
 }

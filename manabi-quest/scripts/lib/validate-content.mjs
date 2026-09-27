@@ -5,7 +5,7 @@ import { parseMarkup, plainText, textOutsideRuby } from '../../public/js/lib/mar
 import { isKanji, isLearnedBy4th } from '../../public/js/data/kanji-grades.js';
 
 const QUESTION_KEYS = new Set(['id', 'level', 'q', 'big', 'choices', 'answer', 'explain', 'hint', 'speak', 'listenOnly', 'kanjiQuiz']);
-const UNIT_KEYS = new Set(['id', 'title', 'icon', 'description', 'questions']);
+const UNIT_KEYS = new Set(['id', 'title', 'icon', 'description', 'grade', 'gradeLabel', 'questions']);
 const KANA_RE = /^[ぁ-ゖァ-ヺー・]+$/u;
 const BANNED_CHOICES = ['すべて', 'どれでもない', '全部正しい', 'ぜんぶ'];
 
@@ -51,6 +51,12 @@ export function validateSubject(data, subjectId) {
     checkText(unit.title, `${uw} title`, { errors, required: true, max: 16 });
     checkText(unit.description, `${uw} description`, { errors, required: true, max: 40 });
     if (typeof unit.icon !== 'string' || unit.icon.length === 0) errors.push(`${uw} icon（絵文字1つ）がありません`);
+    // ふりかえり（下の学年）の単元：grade は 1〜3、gradeLabel は「1・2年」のような表示用
+    if (unit.grade !== undefined && ![1, 2, 3].includes(unit.grade)) errors.push(`${uw} grade は 1・2・3 のどれかにしてください`);
+    if (unit.gradeLabel !== undefined) {
+      if (unit.grade === undefined) errors.push(`${uw} gradeLabel は grade といっしょに使ってください`);
+      checkText(unit.gradeLabel, `${uw} gradeLabel`, { errors, required: true, max: 8 });
+    }
 
     const qs = Array.isArray(unit.questions) ? unit.questions : [];
     if (qs.length === 0) errors.push(`${uw} questions が空です`);

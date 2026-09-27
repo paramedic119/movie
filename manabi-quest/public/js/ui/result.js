@@ -5,6 +5,7 @@ import { openModal } from './modal.js';
 import { STAGE_INFO, titleFor } from '../game/rewards.js';
 import { withCommas } from '../lib/numfmt.js';
 import { startUnitStage, startMix, startReview, startRevenge, startDaily } from './session.js';
+import { furikaeriFor } from '../data/furikaeri.js';
 
 const EX_TEXT = {
   ex1: { name: 'EX 1', mult: 2, lead: '全問せいかい！ 追加テストに ちょうせんできるよ！' },
@@ -62,6 +63,9 @@ export function mountResult(root, ctx) {
   const wrong = r.results.filter((x) => !x.correct);
   const ex = r.nextEx && !timeUp ? EX_TEXT[r.nextEx] : null;
   const homeUnit = r.homeUnitId ? ctx.unitById(r.homeUnitId) : null;
+  // まちがいが2問以上（または★1つ以下）のときは、もとになる下の学年の単元をおすすめ（EX・リベンジはのぞく）
+  const struggled = !timeUp && !r.stageKind.startsWith('ex') && r.stageKind !== 'revenge' && (wrong.length >= 2 || r.stars <= 1);
+  const furikaeri = struggled ? furikaeriFor([...new Set(wrong.map((x) => x.q.unit))], ctx.unitById).slice(0, 2) : [];
   const calm = ctx.effectsLevel() === 'calm';
   // 演出のタイミング（ミリ秒）：★ → ハンコ → たからばこ → しょうごうゲージ → EXパネル
   const T = calm ? { star: 0, stamp: 150, chest: 300, gauge: 450, ex: 0 } : { star: 250, stamp: 950, chest: 1450, gauge: 1900, ex: 2500 };
@@ -134,6 +138,24 @@ export function mountResult(root, ctx) {
                   .join('')}
               </ul>
               ${timeUp ? '' : '<button class="btn btn--primary" data-act="revenge">🔁 まちがえた問題に もういちど ちょうせん</button>'}
+            </div>`
+          : ''
+      }
+
+      ${
+        furikaeri.length
+          ? `<div class="card furikaeri-card">
+              <h2>🔁 じゅんびうんどう しよう</h2>
+              <p>むずかしかったところは、下の学年で習ったことが もとになっているよ。ふりかえって 力をつけよう！</p>
+              ${furikaeri
+                .map(
+                  (u) => `<button class="furikaeri-btn" data-act="furikaeri" data-id="${u.id}">
+                    <span class="furikaeri-btn__icon" aria-hidden="true">${u.icon}</span>
+                    <span class="furikaeri-btn__body"><span class="grade-tag">${esc(u.gradeLabel)}</span>${md(u.title)}</span>
+                    <span aria-hidden="true">▶</span>
+                  </button>`,
+                )
+                .join('')}
             </div>`
           : ''
       }
@@ -270,6 +292,7 @@ export function mountResult(root, ctx) {
 
   const offAct = onAct(root, {
     chest: openChest,
+    furikaeri: (el) => startUnitStage(ctx, { unitId: el.dataset.id, stageKind: 'normal' }),
     ex: () => startUnitStage(ctx, { unitId: r.unitId, stageKind: r.nextEx, prev: r.chain }),
     revenge: () => startRevenge(ctx, r),
     retry,

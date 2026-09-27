@@ -6,6 +6,7 @@ import { friendById } from '../game/shop.js';
 import { remainingSeconds, dayRecord, unitMastery, dateKey } from '../game/state.js';
 import { startReview, startDaily, reviewableEntries } from './session.js';
 import { openModal } from './modal.js';
+import { isGrade4 } from '../data/subjects.js';
 import { withCommas } from '../lib/numfmt.js';
 
 function showGuide(ctx) {
@@ -47,7 +48,7 @@ export function mountHome(root, ctx) {
   const dailyDone = st.daily?.date === dateKey(now) && st.daily.cleared;
 
   const subjectCards = ctx.SUBJECTS.map((subj) => {
-    const units = ctx.subjects[subj.id]?.units ?? [];
+    const units = (ctx.subjects[subj.id]?.units ?? []).filter(isGrade4);
     const stars = units.reduce((sum, u) => sum + (st.units[u.id]?.stars ?? 0), 0);
     const masters = units.filter((u) => (st.units[u.id]?.ex ?? 0) >= 3).length;
     const mastery = units.length ? units.reduce((sum, u) => sum + unitMastery(st, u.id), 0) / units.length : 0;

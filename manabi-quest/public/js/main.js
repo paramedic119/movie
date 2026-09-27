@@ -1,6 +1,6 @@
 // まなびクエスト：アプリの起動と画面の切りかえ
 
-import { SUBJECTS, MODE_META, subjectById, loadAllSubjects } from './data/subjects.js';
+import { SUBJECTS, MODE_META, subjectById, loadAllSubjects, isGrade4 } from './data/subjects.js';
 import { createStore, pruneDays } from './game/state.js';
 import { createPlaytime } from './game/playtime.js';
 import { createRng } from './lib/rng.js';
@@ -68,7 +68,7 @@ async function boot() {
     effectsLevel: () => store.state.settings.effects,
     friendCtx: () => ({
       subjectIds: SUBJECTS.map((s) => s.id),
-      unitIdsBySubject: Object.fromEntries(Object.entries(subjects).map(([id, s]) => [id, s.units.map((u) => u.id)])),
+      unitIdsBySubject: Object.fromEntries(Object.entries(subjects).map(([id, s]) => [id, s.units.filter(isGrade4).map((u) => u.id)])),
     }),
     go(hash) {
       routeHash = hash;

@@ -106,7 +106,8 @@ for (const subject of ['kokugo', 'sansu', 'rika', 'shakai', 'eigo']) {
   test(`${subject}：全問正解で EX ステージに進め、コインがふえる`, async () => {
     const { page, errors, context } = await openApp();
     await page.click(`.subject-card[data-id="${subject}"]`);
-    const units = await page.$$eval('.unit-card', (els) => els.map((e) => e.dataset.id));
+    // 4年生の単元のうち、いちばん下の単元（ふりかえりの単元は のぞく）
+    const units = await page.$$eval('.unit-card:not(.unit-card--review)', (els) => els.map((e) => e.dataset.id));
     assert.ok(units.length >= 5);
     await page.click(`.unit-card[data-id="${units[units.length - 1]}"]`);
     const before0 = await coins(page);
@@ -329,6 +330,41 @@ test('まちがえると コンボとフィーバーは おわる（コインは
   await answer(page, false, { next: false });
   assert.equal(await page.$('.quiz.fever'), null);
   assert.equal(await coins(page), before);
+  await context.close();
+});
+
+test('ふりかえり：4年の単元で つまずくと、下の学年の単元をおすすめして そのまま練習できる', async () => {
+  const { page, errors, context } = await openApp();
+  await page.click('.subject-card[data-id="sansu"]');
+  await page.waitForSelector('.review-head');
+  const reviewIds = await page.$$eval('.unit-card--review', (els) => els.map((e) => e.dataset.id));
+  assert.ok(reviewIds.includes('sansu-kuku') && reviewIds.includes('sansu-amari'), 'ふりかえりの単元がある');
+  assert.ok((await page.textContent('.unit-card--review .grade-tag')).includes('年'), '学年の表示');
+  await page.click('.unit-card[data-id="sansu-warizan"]');
+  await playStage(page, 5, (i) => i >= 2);
+  await page.waitForSelector('.furikaeri-card');
+  const suggested = await page.$$eval('.furikaeri-btn', (els) => els.map((e) => e.dataset.id));
+  assert.deepEqual(suggested, ['sansu-amari', 'sansu-kuku']);
+  await page.click('.furikaeri-btn');
+  await page.waitForFunction(() => location.hash === '#/play');
+  assert.equal(await page.evaluate(() => globalThis.__mq.session.unitId), 'sansu-amari');
+  await answer(page, true);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('ふりかえり：最近の正答率が低い4年の単元があると、もとになる単元に「おすすめ」がつく', async () => {
+  const { page, context } = await openApp({
+    init: () =>
+      localStorage.setItem(
+        'manabi-quest:v1',
+        JSON.stringify({ v: 1, seenGuide: true, unitStats: { 'sansu-warizan': { n: 8, c: 3, recent: [0, 1, 0, 0, 1, 0, 1, 0] } } }),
+      ),
+  });
+  await page.click('.subject-card[data-id="sansu"]');
+  await page.waitForSelector('.review-head');
+  const osusume = await page.$$eval('.unit-card--review', (els) => els.filter((e) => e.querySelector('.tag--osusume')).map((e) => e.dataset.id));
+  assert.deepEqual(osusume.sort(), ['sansu-amari', 'sansu-kuku']);
   await context.close();
 });
 

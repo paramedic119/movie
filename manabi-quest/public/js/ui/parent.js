@@ -5,6 +5,7 @@ import { esc, md, onAct } from './dom.js';
 import { openModal, toast } from './modal.js';
 import { dateKey, dayRecord, remainingSeconds } from '../game/state.js';
 import { dueEntries } from '../game/review.js';
+import { furikaeriFor } from '../data/furikaeri.js';
 import { withCommas } from '../lib/numfmt.js';
 import { plainText } from '../lib/markup.js';
 
@@ -207,7 +208,14 @@ export function mountParent(root, ctx) {
           ${
             weak.length
               ? `<h3 class="card-sub-title">最近つまずいている単元</h3>
-                 <ul class="weak-list">${weak.map((w) => `<li>${ctx.subjectMeta(w.unit.subject).emoji} ${esc(plainText(w.unit.title))}：最近の正答率 <b>${Math.round(w.rate * 100)}%</b></li>`).join('')}</ul>`
+                 <ul class="weak-list">${weak
+                   .map((w) => {
+                     const back = furikaeriFor([w.unit.id], ctx.unitById);
+                     return `<li>${ctx.subjectMeta(w.unit.subject).emoji} ${esc(plainText(w.unit.title))}：最近の正答率 <b>${Math.round(w.rate * 100)}%</b>${
+                       back.length ? `<br><small class="muted">おすすめのふりかえり：${back.map((u) => `${esc(u.gradeLabel)}「${esc(plainText(u.title))}」`).join('・')}</small>` : ''
+                     }</li>`;
+                   })
+                   .join('')}</ul>`
               : ''
           }
         </div>

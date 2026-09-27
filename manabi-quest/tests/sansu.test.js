@@ -2,7 +2,8 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import sansu from '../public/js/data/sansu.js';
+import sansuMain from '../public/js/data/sansu.js';
+import sansuFurikaeri from '../public/js/data/sansu-furikaeri.js';
 import { createRng } from '../public/js/lib/rng.js';
 import { normalizeNumber, decAdd, decSub } from '../public/js/lib/numfmt.js';
 import { checkText } from '../scripts/lib/validate-content.mjs';
@@ -10,6 +11,8 @@ import { planHissan, createHissan } from '../public/js/ui/hissan.js';
 import { parseFraction, fracEq, evalExpr, kanjiToNumber, plain } from './helpers.js';
 
 const N = 400;
+// 4年生の単元と、ふりかえり（1〜3年）の単元
+const sansu = { units: [...sansuMain.units, ...sansuFurikaeri.units] };
 const unit = (id) => sansu.units.find((u) => u.id === id);
 
 function* generated(id, levels = [1, 2, 3], n = N, seed = 7) {
@@ -418,5 +421,151 @@ test('何倍でくらべる：何倍・もとの大きさ・差と倍のちが�
     } else if ((m = t.match(/青いリボンの (\d+)倍、青いリボンの長さは 黄色いリボンの (\d+)倍/))) {
       assert.equal(ans(q), Number(m[1]) * Number(m[2]), t);
     } else assert.fail(`知らない形の問題: ${t}`);
+  }
+});
+
+// ---------- ふりかえり（1〜3年） ----------
+
+test('ふりかえりの単元：学年の表示がある', () => {
+  for (const u of sansuFurikaeri.units) {
+    assert.ok([1, 2, 3].includes(u.grade), u.id);
+    if (u.gradeLabel) assert.match(u.gradeLabel, /^[1-3](・[1-3])?年$/, u.id);
+  }
+  const ids = sansu.units.map((u) => u.id);
+  assert.equal(new Set(ids).size, ids.length, '単元IDが重複しない');
+});
+
+test('九九とかけ算：答えが正しい', () => {
+  for (const q of generated('sansu-kuku')) {
+    const t = plain(q.q);
+    const b = plain(q.big ?? '');
+    let m;
+    if ((m = b.match(/^(\d+) × (\d+)$/))) assert.equal(ans(q), Number(m[1]) * Number(m[2]), b);
+    else if ((m = b.match(/^□ × (\d+) ＝ (\d+)$/))) assert.equal(ans(q) * Number(m[1]), Number(m[2]), b);
+    else if ((m = b.match(/^(\d+) × □ ＝ (\d+)$/))) assert.equal(ans(q) * Number(m[1]), Number(m[2]), b);
+    else if ((m = t.match(/^1こ (\d+)円のおかしを (\d+)こ買います/))) assert.equal(ans(q), Number(m[1]) * Number(m[2]), t);
+    else assert.fail(`知らない形の問題: ${t} ${b}`);
+  }
+});
+
+test('たし算・ひき算の筆算：答えと、くり上がり・くり下がりがある', () => {
+  for (const q of generated('sansu-tashihiki')) {
+    assert.equal(q.kind, 'hissan');
+    const { op, a, b, result } = q.hissan;
+    const want = op === '+' ? BigInt(a) + BigInt(b) : BigInt(a) - BigInt(b);
+    assert.equal(result, String(want), `${a} ${op} ${b}`);
+    assert.ok(want > 0n);
+    const plan = planHissan(q.hissan);
+    assert.ok(Object.keys(plan.hints).length > 0, `くり上がり・くり下がりがある ${a} ${op} ${b}`);
+    // 1けたずつ正しく入れると、せいかいで終わる
+    let done = null;
+    const h = createHissan({ innerHTML: '', querySelector: () => null }, q.hissan, { onComplete: (r) => (done = r) });
+    for (const d of result.split('').reverse()) h.input(d);
+    assert.deepEqual(done, { correct: true, mistakes: 0 }, `${a} ${op} ${b}`);
+  }
+});
+
+test('わり算とあまり：答えとあまりが正しい', () => {
+  for (const q of generated('sansu-amari')) {
+    const t = plain(q.q);
+    const b = plain(q.big ?? '');
+    let m;
+    if ((m = b.match(/^(\d+) ÷ (\d+)$/))) {
+      const [n, d] = [Number(m[1]), Number(m[2])];
+      assert.equal(Number(q.fields[0].answer), Math.floor(n / d), b);
+      if (q.fields.length === 2) {
+        assert.equal(Number(q.fields[1].answer), n % d, b);
+        assert.ok(n % d > 0, 'あまりがある');
+      } else assert.equal(n % d, 0, 'わり切れる');
+    } else if ((m = b.match(/^(\d+) × (\d+) ＋ (\d+) ＝ □$/))) {
+      assert.equal(ans(q), Number(m[1]) * Number(m[2]) + Number(m[3]), b);
+      assert.ok(Number(m[3]) < Number(m[1]), 'あまりは わる数より小さい');
+    } else if ((m = t.match(/^(\d+)人が、1そうに(\d+)人ずつ/))) assert.equal(ans(q), Math.ceil(Number(m[1]) / Number(m[2])), t);
+    else if ((m = t.match(/^(\d+)cmのリボンを、(\d+)cmずつ/))) assert.equal(ans(q), Math.floor(Number(m[1]) / Number(m[2])), t);
+    else if ((m = t.match(/^あめが (\d+)こあります。(\d+)人で/))) {
+      assert.equal(Number(q.fields[0].answer), Math.floor(Number(m[1]) / Number(m[2])), t);
+      assert.equal(Number(q.fields[1].answer), Number(m[1]) % Number(m[2]), t);
+    } else assert.fail(`知らない形の問題: ${t} ${b}`);
+  }
+});
+
+test('長さ・かさ・重さ・時間：たんいと時こくが正しい', () => {
+  const PER = { m: { cm: 100 }, cm: { mm: 10 }, km: { m: 1000 }, L: { dL: 10, mL: 1000 }, kg: { g: 1000 }, t: { kg: 1000 }, 分: { 秒: 60 }, 時間: { 分: 60 } };
+  const toMin = (s) => {
+    if (s === '正午') return 12 * 60;
+    const m = s.match(/^(午前|午後)(\d+)時(?:(\d+)分)?$/);
+    return (Number(m[2]) + (m[1] === '午後' ? 12 : 0)) * 60 + Number(m[3] ?? 0);
+  };
+  for (const q of generated('sansu-tani')) {
+    const t = plain(q.q);
+    let m;
+    if ((m = t.match(/^1(m|cm|km|L|kg|t|分|時間) ?は何(cm|mm|m|dL|mL|g|kg|秒|分)ですか/))) assert.equal(ans(q), PER[m[1]][m[2]], t);
+    else if ((m = t.match(/^(\d+)(m|cm|km|L|kg) (\d+)(cm|mm|m|dL|mL|g) は何/))) {
+      const f = PER[m[2]][m[4]];
+      assert.ok(Number(m[3]) < f, '小さいほうのたんいは くり上がらない');
+      assert.equal(ans(q), Number(m[1]) * f + Number(m[3]), t);
+    } else if ((m = t.match(/^(\d+)(cm|mm|m|dL|mL|g) は何(m|cm|km|L|kg)何/))) {
+      const f = PER[m[3]][m[2]];
+      assert.equal(Number(q.fields[0].answer) * f + Number(q.fields[1].answer), Number(m[1]), t);
+      assert.ok(Number(q.fields[1].answer) < f && Number(q.fields[1].answer) > 0, t);
+    } else if ((m = t.match(/^(午前\d+時\d+分)から (\d+)分後の時こくは、午前何時何分/))) {
+      const end = toMin(m[1]) + Number(m[2]);
+      assert.ok(end < 12 * 60, '午前のうち');
+      assert.equal(Number(q.fields[0].answer) * 60 + Number(q.fields[1].answer), end, t);
+    } else if ((m = t.match(/^(午前\d+時(?:\d+分)?)から (午前\d+時(?:\d+分)?)までの時間は何分/))) {
+      assert.equal(ans(q), toMin(m[2]) - toMin(m[1]), t);
+    } else if ((m = t.match(/^(\d+)時間(\d+)分は何分/))) assert.equal(ans(q), Number(m[1]) * 60 + Number(m[2]), t);
+    else assert.fail(`知らない形の問題: ${t}`);
+  }
+});
+
+test('小数・分数のはじめ：答えが正しい', () => {
+  const tenths = (s) => Math.round(Number(s) * 10);
+  for (const q of generated('sansu-shoubun')) {
+    const t = plain(q.q);
+    const b = plain(q.big ?? '');
+    let m;
+    if ((m = t.match(/^0\.1 を (\d+)こ集めた数/))) assert.equal(tenths(q.fields[0].answer), Number(m[1]), t);
+    else if ((m = t.match(/^([\d.]+) は、0\.1 を何こ/))) assert.equal(ans(q), tenths(m[1]), t);
+    else if ((m = b.match(/^([\d.]+) (＋|−) ([\d.]+)$/))) {
+      const want = m[2] === '＋' ? tenths(m[1]) + tenths(m[3]) : tenths(m[1]) - tenths(m[3]);
+      assert.equal(tenths(q.fields[0].answer), want, b);
+    } else if ((m = q.q.match(/^\[\[1\/(\d+)\]\] の (\d+)こ分/))) {
+      assert.ok(fracEq(parseFraction(q.answer), { n: Number(m[2]), d: Number(m[1]) }), q.q);
+    } else if ((m = q.q.match(/^1 は、\[\[1\/(\d+)\]\] の何こ分/))) assert.equal(ans(q), Number(m[1]), q.q);
+    else if ((m = q.q.match(/^\[\[(\d+)\/(\d+)\]\] と \[\[(\d+)\/(\d+)\]\] では、どちらが大きい/))) {
+      assert.equal(m[2], m[4]);
+      const big = Math.max(Number(m[1]), Number(m[3]));
+      assert.ok(fracEq(parseFraction(q.answer), { n: big, d: Number(m[2]) }), q.q);
+    } else if ((m = q.q.match(/^\[\[(\d+)\/(\d+)\]\] ＋ \[\[(\d+)\/(\d+)\]\] は/))) {
+      const f = parseFraction(q.answer);
+      assert.ok(fracEq(f, { n: Number(m[1]) + Number(m[3]), d: Number(m[2]) }), q.q);
+      for (const c of q.choices) if (c !== q.answer) assert.ok(!fracEq(parseFraction(c), f), `${q.q} ${c}`);
+    } else if ((m = q.q.match(/^1 − \[\[(\d+)\/(\d+)\]\] は/))) {
+      const f = parseFraction(q.answer);
+      assert.ok(fracEq(f, { n: Number(m[2]) - Number(m[1]), d: Number(m[2]) }), q.q);
+      for (const c of q.choices) if (c !== q.answer) assert.ok(!fracEq(parseFraction(c), f), `${q.q} ${c}`);
+    } else assert.fail(`知らない形の問題: ${q.q} ${b}`);
+    if (q.kind === 'choice' && /\[\[/.test(q.answer)) {
+      for (const c of q.choices) if (c !== q.answer) assert.ok(!fracEq(parseFraction(c), parseFraction(q.answer)), `${q.q} ${c}`);
+    }
+  }
+});
+
+test('円と三角形：答えが正しい', () => {
+  for (const q of generated('sansu-zukei')) {
+    const t = plain(q.q);
+    let m;
+    if (q.id.includes('-g-b-')) continue; // 用語の問題
+    if ((m = t.match(/^半径が (\d+)cm の円の、直径/))) assert.equal(ans(q), 2 * Number(m[1]), t);
+    else if ((m = t.match(/^直径が (\d+)cm の円の、半径/))) assert.equal(ans(q) * 2, Number(m[1]), t);
+    else if ((m = t.match(/^1辺が (\d+)cm の正三角形/))) assert.equal(ans(q), 3 * Number(m[1]), t);
+    else if ((m = t.match(/^等しい2つの辺が (\d+)cm で、もう1つの辺が (\d+)cm/))) {
+      const [e, o] = [Number(m[1]), Number(m[2])];
+      assert.ok(o < e * 2, '三角形になる長さ');
+      assert.equal(ans(q), 2 * e + o, t);
+    } else if ((m = t.match(/^直径 (\d+)cm のボールが (\d+)こ/))) assert.equal(ans(q), Number(m[1]) * Number(m[2]), t);
+    else if ((m = t.match(/^横の長さが (\d+)cm の箱に、同じ大きさのボールが (\d+)こ/))) assert.equal(ans(q) * 2 * Number(m[2]), Number(m[1]), t);
+    else assert.fail(`知らない形の問題: ${t}`);
   }
 });
