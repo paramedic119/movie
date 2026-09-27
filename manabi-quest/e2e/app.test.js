@@ -234,6 +234,21 @@ test('なかま：コインで買って パートナーにできる', async () =
   await context.close();
 });
 
+test('画面を開くときに別の画面へ転送されても、前の画面のボタン操作が残らない', async () => {
+  const { page, errors, context } = await openApp({
+    init: () => localStorage.setItem('manabi-quest:v1', JSON.stringify({ v: 1, seenGuide: true, friends: ['pao', 'koala'], partner: 'pao' })),
+  });
+  // 結果のデータがない「けっか画面」→ ホームへ転送される
+  await page.goto(`${BASE}?debug#/result`);
+  await page.waitForSelector('.hero');
+  assert.equal(await page.evaluate(() => location.hash), '#/');
+  await page.click('[data-tab="friends"]');
+  await page.click('[data-act="partner"][data-id="koala"]');
+  await page.waitForFunction(() => globalThis.__mq.store.state.partner === 'koala');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
 test('スマホのせまい画面（360px）でも 横にはみ出さない', async () => {
   const { page, context } = await openApp({ width: 360, height: 740 });
   const overflow = () => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);

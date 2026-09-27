@@ -117,6 +117,7 @@ async function boot() {
   }
 
   let unmount = () => {};
+  let renderId = 0;
   let routeHash = location.hash || '#/';
   function parseHash() {
     const parts = routeHash.replace(/^#\/?/, '').split('/');
@@ -128,6 +129,7 @@ async function boot() {
   }
 
   function render() {
+    const id = (renderId += 1);
     let { name, params } = parseHash();
     const status = ctx.playtime.status();
     // 時間になったら、クイズのとちゅう・けっか画面以外は「きょうはここまで」へ
@@ -143,6 +145,7 @@ async function boot() {
     }
     const route = ROUTES[name];
     unmount();
+    unmount = () => {};
     screen.innerHTML = '';
     document.body.dataset.mode = route.mode ?? 'normal';
     tabbar.querySelectorAll('[data-tab]').forEach((a) => {
@@ -152,7 +155,13 @@ async function boot() {
       else a.removeAttribute('aria-current');
     });
     refreshHud();
-    unmount = route.mount(screen, ctx, params) ?? (() => {});
+    const cleanup = route.mount(screen, ctx, params) ?? (() => {});
+    // 画面を作っている間に別の画面へ切りかわった（リダイレクトした）ときは、こちらを片づける
+    if (id !== renderId) {
+      cleanup();
+      return;
+    }
+    unmount = cleanup;
     window.scrollTo(0, 0);
     screen.focus({ preventScroll: true });
   }
@@ -167,8 +176,11 @@ async function boot() {
   ctx.applyTheme();
   ctx.applySettings();
   ctx.playtime.start();
+  // 「もどる」ボタンなど。popstate と hashchange の両方が来ても1回だけ描画する
   const syncFromLocation = () => {
-    routeHash = location.hash || '#/';
+    const next = location.hash || '#/';
+    if (next === routeHash) return;
+    routeHash = next;
     render();
   };
   window.addEventListener('hashchange', syncFromLocation);
