@@ -32,6 +32,7 @@ function begin(ctx, { subjectId, unitId = null, homeUnitId = unitId, unitTitle, 
     used: new Set([...(prev?.used ?? []), ...questions.map((q) => q.id)]),
     mastered: [],
     startedAt: Date.now(),
+    startEarned: ctx.store.state.totalEarned, // けっか画面の「しょうごうゲージ」用
   };
   // 前のけっか画面には もどれないようにする（「もどる」でEXステージに何度も入れないように）
   ctx.lastResult = null;

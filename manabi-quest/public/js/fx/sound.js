@@ -35,6 +35,9 @@ function tone(freq, start, dur, { type = 'sine', vol = 1, slideTo = null } = {})
   osc.stop(t0 + dur + 0.05);
 }
 
+// れんぞく正解のたびに1音ずつ上がる音階（ド・レ・ミ・ソ・ラ…）
+const RISE = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24];
+
 export const sfx = {
   setEnabled(v) {
     enabled = Boolean(v);
@@ -49,9 +52,13 @@ export const sfx = {
   digit() {
     tone(880, 0, 0.08, { type: 'triangle', vol: 0.45 });
   },
-  correct() {
-    tone(784, 0, 0.14, { type: 'triangle', vol: 0.7 });
-    tone(1047, 0.1, 0.22, { type: 'triangle', vol: 0.7 });
+  /** 正解。combo が大きいほど音が高くなる */
+  correct(combo = 1) {
+    const step = RISE[Math.min(Math.max(1, combo), RISE.length) - 1];
+    const f = 659 * 2 ** (step / 12);
+    tone(f, 0, 0.13, { type: 'triangle', vol: 0.7 });
+    tone(f * 1.335, 0.09, 0.22, { type: 'triangle', vol: 0.7 });
+    if (combo >= 5) tone(f * 2, 0.17, 0.26, { type: 'sine', vol: 0.3 });
   },
   wrong() {
     tone(330, 0, 0.16, { type: 'sine', vol: 0.5 });
@@ -77,6 +84,44 @@ export const sfx = {
     tone(392, 0, 0.12, { type: 'sawtooth', vol: 0.25 });
     tone(523, 0.1, 0.12, { type: 'sawtooth', vol: 0.25 });
     tone(784, 0.2, 0.3, { type: 'sawtooth', vol: 0.25, slideTo: 1046 });
+  },
+  /** フィーバー！ */
+  fever() {
+    [784, 988, 1175, 1568].forEach((f, i) => tone(f, i * 0.07, 0.14, { type: 'square', vol: 0.16 }));
+    tone(2093, 0.3, 0.4, { type: 'triangle', vol: 0.4 });
+  },
+  /** ラスト1問のドラムロール */
+  drumroll() {
+    for (let i = 0; i < 12; i += 1) tone(120 + (i % 2) * 10, i * 0.055, 0.05, { type: 'triangle', vol: 0.18 + i * 0.03 });
+    tone(262, 0.7, 0.22, { type: 'triangle', vol: 0.5 });
+  },
+  /** EXステージに入るときの「シュッ」 */
+  whoosh() {
+    tone(180, 0, 0.3, { type: 'sawtooth', vol: 0.1, slideTo: 900 });
+  },
+  /** けっかの★（1つめ・2つめ・3つめで音が上がる） */
+  star(i = 0) {
+    const f = [1047, 1319, 1568][i] ?? 1568;
+    tone(f, 0, 0.18, { type: 'triangle', vol: 0.55 });
+    tone(f * 2, 0.03, 0.22, { type: 'sine', vol: 0.2 });
+  },
+  /** ハンコを「ポン」 */
+  stamp() {
+    tone(150, 0, 0.2, { type: 'sine', vol: 0.9, slideTo: 60 });
+    tone(95, 0, 0.12, { type: 'triangle', vol: 0.5 });
+  },
+  /** たからばこが開く */
+  chest() {
+    [784, 988, 1175, 1568, 1976].forEach((f, i) => tone(f, i * 0.06, 0.16, { type: 'triangle', vol: 0.45 }));
+  },
+  /** しょうごうゲージがのびる */
+  gauge() {
+    tone(330, 0, 0.8, { type: 'triangle', vol: 0.22, slideTo: 1320 });
+  },
+  /** しょうごうアップ！ */
+  levelUp() {
+    [523, 659, 784, 1047, 784, 1047, 1319].forEach((f, i) => tone(f, i * 0.09, 0.18, { type: 'square', vol: 0.18 }));
+    tone(1568, 0.63, 0.55, { type: 'triangle', vol: 0.5 });
   },
   buy() {
     tone(988, 0, 0.1, { type: 'square', vol: 0.2 });

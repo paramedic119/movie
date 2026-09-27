@@ -32,6 +32,7 @@ export function createFx({ layer, getLevel }) {
 
   let canvas = null;
   let confettiRaf = 0;
+  const banners = new Set();
 
   const fx = {
     /** キラキラがはじける */
@@ -145,11 +146,17 @@ export function createFx({ layer, getLevel }) {
     },
 
     /** ななめストライプのバナー（「EX 1」「パーフェクト！」など） */
-    banner(text, { sub = '', variant = 'ex', duration = 1300 } = {}) {
+    /**
+     * @param {string} text
+     * @param {{sub?:string, variant?:string, duration?:number, pass?:boolean}} [opts]
+     *   pass=true … バナーの下のボタンをそのまま押せる（遊びを止めない）
+     */
+    banner(text, { sub = '', variant = 'ex', duration = 1300, pass = false } = {}) {
       const el = add(document.createElement('div'));
-      el.className = `fx-banner fx-banner--${variant}`;
+      el.className = `fx-banner fx-banner--${variant} ${pass ? 'fx-banner--pass' : ''}`;
       el.innerHTML = `<div class="fx-banner__strip"><span class="fx-banner__text"></span><span class="fx-banner__sub"></span></div>`;
       el.querySelector('.fx-banner__text').textContent = text;
+      el.style.setProperty('--len', String(Math.max(4, [...text].length))); // 長い文字は小さくして画面におさめる
       el.querySelector('.fx-banner__sub').textContent = sub;
       const strip = el.firstElementChild;
       const calm = getLevel() === 'calm';
@@ -168,14 +175,49 @@ export function createFx({ layer, getLevel }) {
             { transform: 'translate(120%, -50%) rotate(-6deg)' },
           ];
       const anim = strip.animate(frames, { duration: duration + 500, easing: 'ease-in-out', fill: 'forwards' });
+      banners.add(anim);
       return new Promise((resolve) => {
         const finish = () => {
+          banners.delete(anim);
           el.remove();
           resolve();
         };
         anim.onfinish = finish;
         anim.oncancel = finish;
-        el.addEventListener('click', () => anim.finish(), { once: true });
+        if (!pass) el.addEventListener('click', () => anim.finish(), { once: true });
+      });
+    },
+
+    /** 出ているバナーをすぐに終わらせる（画面を切りかえるとき） */
+    clearBanners() {
+      [...banners].forEach((anim) => anim.finish());
+    },
+
+    /** ハンコを「ポン」とおす（el はハンコの要素） */
+    stamp(el) {
+      if (!el) return;
+      el.classList.add('on');
+      if (getLevel() === 'calm') {
+        el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 250 });
+        return;
+      }
+      el.animate(
+        [
+          { transform: 'scale(2.6) rotate(-30deg)', opacity: 0 },
+          { transform: 'scale(0.9) rotate(-12deg)', opacity: 1, offset: 0.55 },
+          { transform: 'scale(1.06) rotate(-12deg)', offset: 0.78 },
+          { transform: 'scale(1) rotate(-12deg)', opacity: 1 },
+        ],
+        { duration: 420, easing: 'cubic-bezier(.2,.9,.3,1)' },
+      );
+    },
+
+    /** 「ドン」と下にゆれる */
+    thud(el) {
+      if (!el || getLevel() === 'calm') return;
+      el.animate([{ transform: 'translateY(0)' }, { transform: 'translateY(5px)' }, { transform: 'translateY(-2px)' }, { transform: 'translateY(0)' }], {
+        duration: 260,
+        easing: 'ease-out',
       });
     },
 

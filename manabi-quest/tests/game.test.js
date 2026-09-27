@@ -2,7 +2,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { comboMultiplier, coinsForAnswer, starsFor, stageBonus, titleFor, nextExStage, TITLES } from '../public/js/game/rewards.js';
+import { comboMultiplier, coinsForAnswer, starsFor, stageBonus, titleFor, nextExStage, TITLES, comboTier, COMBO_TIERS, FEVER_COMBO } from '../public/js/game/rewards.js';
 import { addMistake, recordReview, dueEntries, startOfDay, DAY_MS, NOTEBOOK_LIMIT } from '../public/js/game/review.js';
 import { buildStage, buildMixStage, buildReviewStage, buildDailyStage, questionWeight } from '../public/js/game/stage.js';
 import { createStore, recordAnswer, recordStage, remainingSeconds, dateKey, mergeWithDefaults, defaultState, STORAGE_KEY } from '../public/js/game/state.js';
@@ -36,6 +36,14 @@ test('コンボでコインがふえ、上限は3倍', () => {
   assert.equal(coinsForAnswer({ stageKind: 'ex1', combo: 1 }), 20);
   assert.equal(coinsForAnswer({ stageKind: 'ex3', combo: 12 }), 150);
   assert.equal(coinsForAnswer({ stageKind: 'normal', combo: 1, usedHint: true }), 5, 'ヒントを使うと半分');
+});
+
+test('コンボの段階（演出）：3でいいかんじ、5でフィーバー、あとは段階的に', () => {
+  assert.deepEqual([0, 1, 2, 3, 4, 5, 7, 8, 10, 11, 14, 30].map(comboTier), [0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 5, 5]);
+  assert.equal(FEVER_COMBO, 5);
+  assert.equal(COMBO_TIERS[comboTier(FEVER_COMBO) - 1].label, 'フィーバー！');
+  // 演出の段階はコインの計算を変えない
+  assert.equal(coinsForAnswer({ stageKind: 'normal', combo: 5 }), 20);
 });
 
 test('★・ボーナス・EXの順番・しょうごう', () => {

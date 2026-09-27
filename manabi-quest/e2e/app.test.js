@@ -290,6 +290,48 @@ test('EXのとちゅうで「もどる」をおしても、前のけっか画面
   await context.close();
 });
 
+test('演出：ラスト1問 → フィーバー → ハンコ・たからばこ・しょうごうゲージ → EXでもフィーバーがつづく', async () => {
+  const { page, errors, context } = await openApp({
+    init: () => localStorage.setItem('manabi-quest:v1', JSON.stringify({ v: 1, seenGuide: true, coins: 280, totalEarned: 280 })),
+  });
+  await page.click('.subject-card[data-id="rika"]');
+  await page.click('.unit-card');
+  for (let i = 0; i < 4; i += 1) await answer(page, true);
+  await page.waitForSelector('.last-one');
+  assert.match(await page.textContent('.last-one'), /あと1問で EXステージ/);
+  await answer(page, true, { next: false });
+  await page.waitForSelector('.quiz.fever');
+  assert.match(await page.textContent('#combo'), /フィーバー/);
+  await page.click('[data-act="next"]');
+  await page.waitForFunction(() => location.hash === '#/result');
+  await page.waitForSelector('.stamp.on');
+  assert.match(await page.textContent('.stamp'), /たいへん/);
+  await page.waitForSelector('.chest.open');
+  await page.waitForSelector('.gauge.up');
+  assert.match(await page.textContent('.gauge'), /まなびのひよこ/, '300コインをこえて しょうごうアップ');
+  await page.waitForFunction(() => document.querySelector('#res-coins').textContent === String(globalThis.__mq.lastResult.stageCoins + globalThis.__mq.lastResult.bonus));
+  await page.click('[data-act="ex"]');
+  await page.waitForSelector('.stage-tag--ex1');
+  await page.waitForSelector('.quiz.fever');
+  await currentQuestion(page);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('まちがえると コンボとフィーバーは おわる（コインは へらない）', async () => {
+  const { page, context } = await openApp();
+  await page.click('.subject-card[data-id="rika"]');
+  await page.click('.unit-card');
+  await playStage(page, 5);
+  await page.click('[data-act="ex"]');
+  await page.waitForSelector('.quiz.fever');
+  const before = await coins(page);
+  await answer(page, false, { next: false });
+  assert.equal(await page.$('.quiz.fever'), null);
+  assert.equal(await coins(page), before);
+  await context.close();
+});
+
 test('スマホのせまい画面（360px）でも 横にはみ出さない', async () => {
   const { page, context } = await openApp({ width: 360, height: 740 });
   const overflow = () => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);

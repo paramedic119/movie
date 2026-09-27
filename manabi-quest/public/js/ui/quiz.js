@@ -6,7 +6,7 @@ import { figureSvg } from './figure.js';
 import { openModal } from './modal.js';
 import { normalizeNumber, groupBy4, withCommas } from '../lib/numfmt.js';
 import { plainText } from '../lib/markup.js';
-import { coinsForAnswer, comboMultiplier, stageBonus, starsFor, STAGE_INFO, nextExStage } from '../game/rewards.js';
+import { coinsForAnswer, comboMultiplier, comboTier, COMBO_TIERS, FEVER_COMBO, stageBonus, starsFor, STAGE_INFO, nextExStage } from '../game/rewards.js';
 import { recordAnswer, recordStage, addCoins, dateKey } from '../game/state.js';
 import { friendById, unlockSecretFriends } from '../game/shop.js';
 
@@ -14,6 +14,7 @@ const LEVEL_TAG = { 1: 'きほん', 2: 'ひょうじゅん', 3: 'チャレンジ
 const PRAISE = ['すごい！', 'やったね！', 'そのちょうし！', 'かんぺき！', 'さすが！', 'いいね！', 'ばっちり！'];
 const COMFORT = ['おしい！ かいせつを見てみよう', 'だいじょうぶ、つぎはできるよ', 'まちがいは のびるチャンス！', 'ノートに入れたから、あとで ふくしゅうしよう'];
 const isEnglish = (s) => /^[\x20-\x7E]+$/.test(s) && /[A-Za-z]/.test(s);
+const LAST_ONE_GOAL = { normal: 'EXステージ', ex1: 'EX 2 かいほう', ex2: 'EX 3 かいほう', ex3: 'マスター' };
 
 export function mountQuiz(root, ctx) {
   const s = ctx.session;
@@ -33,6 +34,7 @@ export function mountQuiz(root, ctx) {
   let usedHint = false;
   let hissan = null;
   let fields = null; // { values: string[], active: number }
+  let mounted = true;
   let shownAt = 0; // 問題を出した時刻（連打で次の問題に答えてしまわないように）
   const tooSoon = () => performance.now() - shownAt < 280;
   // 少しあとに動かす処理（画面をはなれたら取り消す）
@@ -63,7 +65,7 @@ export function mountQuiz(root, ctx) {
       </div>
       <div class="cheer">
         <div class="cheer__friends">${friends.map((f) => `<span class="cheer__f" title="${esc(f.name)}">${f.emoji}</span>`).join('')}</div>
-        <div class="cheer__bubble" id="bubble" aria-live="polite">${s.stageKind.startsWith('ex') ? 'EXステージだ！ おちついていこう！' : 'がんばれ！'}</div>
+        <div class="cheer__bubble" id="bubble" aria-live="polite">${s.combo >= FEVER_COMBO ? `フィーバー つづいてるよ！ ${s.combo}れんぞく中！` : s.stageKind.startsWith('ex') ? 'EXステージだ！ おちついていこう！' : 'がんばれ！'}</div>
       </div>
       <div class="combo" id="combo" aria-live="polite"></div>
       <div class="qcard" id="qcard"></div>
@@ -92,19 +94,31 @@ export function mountQuiz(root, ctx) {
       .map((_, i) => {
         const r = s.results[i];
         const cls = r ? (r.correct ? 'ok' : 'ng') : i === s.index ? 'now' : '';
-        return `<li class="${cls}"></li>`;
+        return `<li class="${cls}">${r?.correct ? '★' : ''}</li>`;
       })
       .join('');
     $('.dots', root).innerHTML = dots;
     $('#ok-n', root).textContent = s.results.filter((r) => r.correct).length;
     $('#ng-n', root).textContent = s.results.filter((r) => !r.correct).length;
     const $combo = $('#combo', root);
+    const tier = comboTier(s.combo);
     if (s.combo >= 2) {
-      $combo.innerHTML = `🔥 <b>${s.combo}</b> れんぞく！ <span>コイン ×${comboMultiplier(s.combo + 1).toFixed(2).replace(/\.?0+$/, '')}</span>`;
+      const label = tier >= 2 ? ` <em>${COMBO_TIERS[tier - 1].label}</em>` : '！';
+      $combo.innerHTML = `🔥 <b>${s.combo}</b> れんぞく${label} <span>コイン ×${comboMultiplier(s.combo + 1).toFixed(2).replace(/\.?0+$/, '')}</span>`;
       $combo.classList.add('on');
     } else {
       $combo.classList.remove('on');
     }
+    $combo.dataset.tier = String(tier);
+    const $quiz = root.querySelector('.quiz');
+    $quiz.classList.toggle('fever', s.combo >= FEVER_COMBO);
+    $quiz.dataset.tier = String(tier);
+  }
+
+  /** 全問せいかいまで あと1問のとき（それまで ぜんぶ せいかい） */
+  function isLastChance() {
+    const n = s.questions.length;
+    return n >= 3 && s.index === n - 1 && s.results.length === s.index && s.results.every((r) => r.correct);
   }
 
   // ---------- 問題カード ----------
@@ -124,7 +138,10 @@ export function mountQuiz(root, ctx) {
     $card.style.setProperty('--l', subj.light);
     const bigClass = subj.id === 'kokugo' ? 'qcard__big kyokasho' : isEnglish(plainText(q.big ?? '')) ? 'qcard__big en' : 'qcard__big';
     const canSpeak = q.speak && speech.available();
+    const lastChance = isLastChance();
+    $card.classList.toggle('qcard--last', lastChance);
     $card.innerHTML = `
+      ${lastChance ? `<div class="last-one" role="status"><b>ラスト1問！</b> あと1問で ${esc(LAST_ONE_GOAL[s.stageKind] && s.unitId ? LAST_ONE_GOAL[s.stageKind] : 'パーフェクト')}！</div>` : ''}
       <div class="qcard__head">
         <span class="level-tag lv${q.level}">${LEVEL_TAG[q.level] ?? ''}</span>
         ${crossSubject ? `<span class="subj-mini" style="--c:${subj.color}">${subj.emoji} ${esc(subj.name)}</span>` : ''}
@@ -207,9 +224,13 @@ export function mountQuiz(root, ctx) {
     hissan = null;
     $feedback.hidden = true;
     $feedback.innerHTML = '';
-    root.querySelector('.quiz').classList.remove('answered');
+    root.querySelector('.quiz').classList.remove('answered', 'intro');
     renderStatus();
     renderCard();
+    if (isLastChance()) {
+      sfx.drumroll();
+      say('ラスト1問！ おちついて いこう！');
+    }
     if (q.kind === 'choice') {
       renderChoices();
     } else {
@@ -252,10 +273,13 @@ export function mountQuiz(root, ctx) {
     if (answered) return;
     answered = true;
     const now = ctx.now();
+    const prevCombo = s.combo;
     s.combo = correct ? s.combo + 1 : 0;
     s.maxCombo = Math.max(s.maxCombo, s.combo);
     const coins = correct ? coinsForAnswer({ stageKind: s.stageKind, combo: s.combo, usedHint }) : 0;
     const before = store.state.coins;
+    const tierUp = correct && comboTier(s.combo) > comboTier(prevCombo);
+    const feverEnded = !correct && prevCombo >= FEVER_COMBO;
     let reviewResult = 'none';
     store.update((st) => {
       reviewResult = recordAnswer(st, q, correct, now);
@@ -268,8 +292,9 @@ export function mountQuiz(root, ctx) {
     renderStatus();
 
     const c = fx.centerOf($card);
+    fx.pop($(`.dots li:nth-child(${s.results.length})`, root));
     if (correct) {
-      sfx.correct();
+      sfx.correct(s.combo);
       fx.ring(c.x, c.y);
       fx.burst(c.x, c.y);
       fx.floatText(c.x, c.y - 20, `+${coins}`, 'coin-text');
@@ -283,7 +308,18 @@ export function mountQuiz(root, ctx) {
           fx.pop($coinPill);
         }
       });
-      if (s.combo >= 3) {
+      const tier = comboTier(s.combo);
+      if (tierUp && tier >= 2) {
+        // フィーバー！ など：画面をよこぎる帯（下のボタンはそのまま押せる）
+        later(() => {
+          sfx.fever();
+          if (ctx.effectsLevel() !== 'calm') {
+            fx.banner(COMBO_TIERS[tier - 1].label, { sub: `${s.combo} れんぞく せいかい！`, variant: 'fever', duration: 700, pass: true });
+          }
+          if (ctx.effectsLevel() === 'exciting') fx.confetti(900);
+        }, 280);
+        say(`${s.combo}れんぞく！ ${COMBO_TIERS[tier - 1].label}`);
+      } else if (s.combo >= 3) {
         later(() => sfx.combo(s.combo), 250);
         say(`${s.combo}れんぞく！ ${PRAISE[s.combo % PRAISE.length]}`);
       } else {
@@ -292,7 +328,7 @@ export function mountQuiz(root, ctx) {
     } else {
       sfx.wrong();
       fx.shake($card);
-      say(COMFORT[Math.floor(Math.random() * COMFORT.length)]);
+      say(feverEnded ? 'フィーバーは ここまで。また つなごう！' : COMFORT[Math.floor(Math.random() * COMFORT.length)]);
     }
     showFeedback(correct, coins, reviewResult);
   }
@@ -430,6 +466,9 @@ export function mountQuiz(root, ctx) {
       nextEx: perfect && s.unitId ? nextExStage(s.stageKind) : null,
       chain: perfect ? { combo: s.combo, maxCombo: s.maxCombo, chainCoins: s.chainCoins, used: s.used } : null,
       chainCoins: s.chainCoins,
+      // しょうごうゲージ用：このステージの前と後の「これまでにかせいだコイン」
+      earnedBefore: s.startEarned ?? store.state.totalEarned,
+      earnedAfter: store.state.totalEarned,
     };
     ctx.session = null;
     ctx.go('#/result');
@@ -485,7 +524,7 @@ export function mountQuiz(root, ctx) {
   });
 
   const onKey = (e) => {
-    if (document.querySelector('.modal')) return;
+    if (!q || document.querySelector('.modal')) return;
     if (e.key === 'Escape') return quit();
     if (answered) {
       if (e.key === 'Enter' || e.key === ' ') {
@@ -531,14 +570,29 @@ export function mountQuiz(root, ctx) {
     };
   }
 
-  if (s.index >= s.questions.length) finish();
-  else showQuestion();
+  renderStatus();
+  if (s.index >= s.questions.length) {
+    finish();
+  } else if (s.stageKind.startsWith('ex') && s.results.length === 0 && ctx.effectsLevel() !== 'calm') {
+    // EXステージに入るときのカットイン（タップでとばせる）。終わったら1問目を出す
+    sfx.whoosh();
+    later(() => sfx.ex(), 300);
+    const info = STAGE_INFO[s.stageKind];
+    root.querySelector('.quiz').classList.add('intro');
+    fx.banner(info.label, { sub: `EXTRA STAGE・コイン ×${info.mult}`, variant: 'ex', duration: 900 }).then(() => {
+      if (mounted) showQuestion();
+    });
+  } else {
+    showQuestion();
+  }
 
   return () => {
+    mounted = false;
     offAct();
     offSpeechFail();
     document.removeEventListener('keydown', onKey);
     timers.forEach(clearTimeout);
+    fx.clearBanners();
     speech.cancel();
     if (ctx.debug) delete globalThis.__mqQuiz;
   };

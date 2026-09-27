@@ -36,6 +36,27 @@ export function coinsForAnswer({ stageKind, combo, usedHint = false }) {
   return Math.max(1, Math.round(coins));
 }
 
+/** コンボの段階（演出だけに使う。コインの計算は comboMultiplier） */
+export const COMBO_TIERS = [
+  { min: 3, label: 'いいかんじ！' },
+  { min: 5, label: 'フィーバー！' },
+  { min: 8, label: 'スーパーフィーバー！' },
+  { min: 11, label: 'ハイパーフィーバー！' },
+  { min: 14, label: 'レジェンド！' },
+];
+
+/** この れんぞく正解から「フィーバー」 */
+export const FEVER_COMBO = COMBO_TIERS[1].min;
+
+/** いまのコンボの段階（0 = まだ、1〜5） */
+export function comboTier(combo) {
+  let tier = 0;
+  COMBO_TIERS.forEach((t, i) => {
+    if (combo >= t.min) tier = i + 1;
+  });
+  return tier;
+}
+
 /** ステージの終わりにもらえるボーナス */
 export function stageBonus(stageKind, correct, total) {
   const perfect = total > 0 && correct === total;
