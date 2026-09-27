@@ -31,6 +31,8 @@ export function mountQuiz(root, ctx) {
   let usedHint = false;
   let hissan = null;
   let fields = null; // { values: string[], active: number }
+  let shownAt = 0; // 問題を出した時刻（連打で次の問題に答えてしまわないように）
+  const tooSoon = () => performance.now() - shownAt < 280;
 
   root.innerHTML = `
     <section class="quiz" style="--c:${titleSubject.color};--l:${titleSubject.light}">
@@ -188,6 +190,7 @@ export function mountQuiz(root, ctx) {
 
   function showQuestion() {
     q = s.questions[s.index];
+    shownAt = performance.now();
     answered = false;
     usedHint = false;
     hissan = null;
@@ -323,7 +326,7 @@ export function mountQuiz(root, ctx) {
   // ---------- 入力 ----------
 
   function pressKey(k) {
-    if (answered) return;
+    if (answered || tooSoon()) return;
     if (q.kind === 'hissan') {
       if (/^\d$/.test(k)) hissan.input(k);
       return;
@@ -357,7 +360,7 @@ export function mountQuiz(root, ctx) {
   }
 
   function choose(i) {
-    if (answered) return;
+    if (answered || tooSoon()) return;
     const btn = $(`.choice[data-i="${i}"]`, $answer);
     const correct = q.choices[i] === q.answer;
     btn?.classList.add(correct ? 'is-correct' : 'is-wrong');
@@ -507,8 +510,9 @@ export function mountQuiz(root, ctx) {
   // テスト用：いまの問題の答えを外から見られるようにする（?debug のときだけ）
   if (ctx.debug) {
     globalThis.__mqQuiz = {
+      /** 答えられる状態になったら問題を返す（出した直後の連打よけの時間は null） */
       get question() {
-        return q;
+        return tooSoon() ? null : q;
       },
       get answered() {
         return answered;
