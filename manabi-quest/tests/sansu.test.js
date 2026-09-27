@@ -6,7 +6,7 @@ import sansu from '../public/js/data/sansu.js';
 import { createRng } from '../public/js/lib/rng.js';
 import { normalizeNumber, decAdd, decSub } from '../public/js/lib/numfmt.js';
 import { checkText } from '../scripts/lib/validate-content.mjs';
-import { planHissan } from '../public/js/ui/hissan.js';
+import { planHissan, createHissan } from '../public/js/ui/hissan.js';
 import { parseFraction, fracEq, evalExpr, kanjiToNumber, plain } from './helpers.js';
 
 const N = 400;
@@ -106,6 +106,22 @@ test('筆算のくり下がりヒント（参考動画の 430 − 36 と同じ�
   assert.deepEqual(add.hints, { 1: '1', 2: '1' });
   const dec = planHissan({ op: '-', a: '5', b: '2.36', result: '2.64' });
   assert.deepEqual(dec.hints, { '-2': '10', '-1': '9', 0: '4' });
+});
+
+test('筆算の入力：まちがえた後に正しく入れたら「まちがい」あつかいにしない', () => {
+  const container = { innerHTML: '', querySelector: () => null };
+  const events = [];
+  const h = createHissan(container, { op: '-', a: '430', b: '36', result: '394' }, {
+    onDigit: (result) => events.push(result),
+    onComplete: (r) => events.push(r),
+  });
+  h.input('6'); // 一の位（正しくは 4）
+  h.input('4');
+  h.input('1'); // 十の位（正しくは 9）
+  h.input('1'); // 2回まちがえたら答えを見せて次のけたへ
+  h.input('3');
+  assert.deepEqual(events, ['wrong', 'fixed', 'wrong', 'shown', 'ok', { correct: false, mistakes: 3 }]);
+  assert.equal(h.finished, true);
 });
 
 test('小数のかけ算・わり算：答えが正しい', () => {

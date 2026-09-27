@@ -2,7 +2,8 @@
 
 import { esc, md, onAct } from './dom.js';
 import { dueEntries, upcomingEntries, startOfDay, DAY_MS, REVIEW_INTERVAL_DAYS } from '../game/review.js';
-import { startReview } from './session.js';
+import { startReview, reviewableEntries } from './session.js';
+import { STAGE_INFO } from '../game/rewards.js';
 
 function whenText(due, now) {
   const days = Math.round((startOfDay(due) - startOfDay(now)) / DAY_MS);
@@ -35,6 +36,8 @@ export function mountNote(root, ctx) {
   const now = ctx.now();
   const due = dueEntries(st.notebook, now);
   const upcoming = upcomingEntries(st.notebook, now);
+  // 読み上げが使えない端末では「聞く問題」を出さないので、その分をのぞいた数
+  const playable = reviewableEntries(ctx).length;
 
   root.innerHTML = `
     <section class="note">
@@ -44,9 +47,11 @@ export function mountNote(root, ctx) {
         <p class="note-guide__stat">「おぼえた！」になった問題：<b>${st.mastered}</b> もん</p>
       </div>
       ${
-        due.length
-          ? `<button class="btn btn--primary btn--big" data-act="start">📒 ふくしゅうスタート（${Math.min(5, due.length)}もん）</button>`
-          : `<div class="card empty">${Object.keys(st.notebook).length ? '🎉 きょう ふくしゅうする問題は ないよ！' : 'まだ まちがえた問題は ないよ。いろいろな単元に ちょうせんしよう！'}</div>`
+        playable
+          ? `<button class="btn btn--primary btn--big" data-act="start">📒 ふくしゅうスタート（${Math.min(STAGE_INFO.review.count, playable)}もん）</button>`
+          : due.length
+            ? '<div class="card empty">🔊 のこりは「聞く問題」だよ。音が出せるときに ふくしゅうしよう！</div>'
+            : `<div class="card empty">${Object.keys(st.notebook).length ? '🎉 きょう ふくしゅうする問題は ないよ！' : 'まだ まちがえた問題は ないよ。いろいろな単元に ちょうせんしよう！'}</div>`
       }
       ${due.length ? `<h2 class="section-title">きょう ふくしゅうする問題（${due.length}）</h2><ul class="note-list">${due.map((e) => entryHtml(e, ctx, now, true)).join('')}</ul>` : ''}
       ${upcoming.length ? `<h2 class="section-title">これから ふくしゅうする問題（${upcoming.length}）</h2><ul class="note-list">${upcoming.map((e) => entryHtml(e, ctx, now, false)).join('')}</ul>` : ''}

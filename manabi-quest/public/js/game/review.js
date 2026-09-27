@@ -12,7 +12,7 @@ export function startOfDay(ts) {
 
 /** ノートに保存する問題（出題時のシャッフルなどは入れない） */
 export function snapshot(q) {
-  const keys = ['id', 'subject', 'unit', 'level', 'kind', 'q', 'big', 'choices', 'answer', 'explain', 'hint', 'speak', 'fields', 'hissan', 'figure', 'kanjiQuiz'];
+  const keys = ['id', 'subject', 'unit', 'level', 'kind', 'q', 'big', 'choices', 'answer', 'explain', 'hint', 'speak', 'listenOnly', 'fields', 'hissan', 'figure', 'kanjiQuiz'];
   const out = {};
   for (const k of keys) if (q[k] !== undefined) out[k] = q[k];
   if (q.originalChoices) out.choices = q.originalChoices;

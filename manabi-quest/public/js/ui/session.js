@@ -58,15 +58,19 @@ export function startMix(ctx, subjectId) {
   return begin(ctx, { subjectId, unitTitle: 'ミックスチャレンジ', stageKind: 'mix', questions });
 }
 
-export function startReview(ctx) {
+/** きょう ふくしゅうできる問題（この端末で出せるものだけ） */
+export function reviewableEntries(ctx) {
   // 問題データがあとで直されていたら、ノートに保存した古い内容ではなく新しい内容で出す
-  const entries = dueEntries(ctx.store.state.notebook, ctx.now())
+  return dueEntries(ctx.store.state.notebook, ctx.now())
     .map((e) => {
       const latest = ctx.questionById?.(e.q.id);
       return latest ? { ...e, q: latest } : e;
     })
     .filter((e) => canUseOn(ctx)(e.q));
-  const questions = buildReviewStage({ entries, rng: ctx.rng });
+}
+
+export function startReview(ctx) {
+  const questions = buildReviewStage({ entries: reviewableEntries(ctx), rng: ctx.rng });
   return begin(ctx, { subjectId: 'review', unitTitle: 'まちがいノート', stageKind: 'review', questions });
 }
 

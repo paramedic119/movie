@@ -60,7 +60,8 @@ export function planHissan({ op, a, b, result }) {
 /**
  * @param {HTMLElement} container
  * @param {{op:string,a:string,b:string,result:string}} spec
- * @param {{hintMode:'auto'|'onError', onDigit:(ok:boolean, el:HTMLElement)=>void, onComplete:(r:{correct:boolean, mistakes:number})=>void}} opts
+ * @param {{hintMode:'auto'|'onError', onDigit:(result:'ok'|'fixed'|'wrong'|'shown', el:HTMLElement)=>void, onComplete:(r:{correct:boolean, mistakes:number})=>void}} opts
+ *   onDigit の result … ok=せいかい / fixed=まちがえた後に せいかい / wrong=まちがい / shown=2回まちがえたので答えを出した
  */
 export function createHissan(container, spec, { hintMode = 'onError', onDigit = () => {}, onComplete = () => {} } = {}) {
   const plan = planHissan(spec);
@@ -161,25 +162,28 @@ export function createHissan(container, spec, { hintMode = 'onError', onDigit = 
       if (finished) return;
       const e = answerExps[pos];
       const expected = expectedDigit(e);
+      let result;
       if (Number(d) === expected) {
-        filled[e] = { d: expected, state: wrongHere ? 'fixed' : 'ok' };
+        result = wrongHere ? 'fixed' : 'ok';
+        filled[e] = { d: expected, state: result };
         wrongHere = 0;
         pos += 1;
       } else {
         mistakes += 1;
         wrongHere += 1;
         showHintFor(e);
+        result = 'wrong';
         if (wrongHere >= 2) {
-          filled[e] = { d: expected, state: 'shown' };
+          result = 'shown';
+          filled[e] = { d: expected, state: result };
           wrongHere = 0;
           pos += 1;
         }
       }
-      const ok = filled[e] && filled[e].state === 'ok';
       if (pos >= answerExps.length) finished = true;
       autoHints();
       render();
-      onDigit(ok, container.querySelector(`.hs-box[data-e="${e}"]`));
+      onDigit(result, container.querySelector(`.hs-box[data-e="${e}"]`));
       if (finished) onComplete({ correct: mistakes === 0, mistakes });
     },
     revealHint() {

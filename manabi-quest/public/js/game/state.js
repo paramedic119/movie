@@ -73,9 +73,87 @@ export function mergeWithDefaults(raw, defaults) {
     else if (Array.isArray(def)) out[key] = Array.isArray(val) ? val : def;
     else if (def === null || typeof def === typeof val) out[key] = val;
   }
-  if (!out.friends.includes('pao')) out.friends.unshift('pao');
-  if (!out.themes.includes('sky')) out.themes.unshift('sky');
+  return sanitizeState(out, defaults);
+}
+
+// ---------- 読みこんだデータの中身をととのえる（こわれた記録があっても起動できるように） ----------
+
+const EFFECT_LEVELS = ['calm', 'normal', 'exciting'];
+
+/** 0以上の有限の数（ちがえば def）。max をこえたら max */
+function count(v, def = 0, max = Infinity) {
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.min(v, max) : def;
+}
+
+/** id → 記録 のマップを、1件ずつ fix で直す（fix が null を返したら捨てる） */
+function mapRecords(obj, fix) {
+  const out = {};
+  for (const [key, val] of Object.entries(obj)) {
+    const fixed = isPlainObject(val) ? fix(val, key) : null;
+    if (fixed) out[key] = fixed;
+  }
   return out;
+}
+
+/** ノートに入っている問題が、出題できる形か */
+function playableQuestion(q, key) {
+  if (!isPlainObject(q) || q.id !== key || typeof q.q !== 'string') return false;
+  if (q.kind === 'choice') return Array.isArray(q.choices) && q.choices.includes(q.answer);
+  if (q.kind === 'input') return Array.isArray(q.fields) && q.fields.length > 0 && q.fields.every(isPlainObject);
+  if (q.kind === 'hissan') return isPlainObject(q.hissan);
+  return false;
+}
+
+function fixNotebookEntry(e, key) {
+  if (!playableQuestion(e.q, key)) return null;
+  const now = Date.now();
+  return {
+    ...e,
+    box: Math.floor(count(e.box, 0, 3)),
+    due: count(e.due, now),
+    wrong: count(e.wrong, 1),
+    added: count(e.added, now),
+    last: count(e.last, now),
+  };
+}
+
+export function sanitizeState(st, defaults = defaultState()) {
+  st.coins = count(st.coins);
+  st.totalEarned = Math.max(count(st.totalEarned), st.coins);
+  st.mastered = count(st.mastered);
+  st.friends = [...new Set(['pao', ...st.friends.filter((f) => typeof f === 'string')])];
+  st.themes = [...new Set(['sky', ...st.themes.filter((t) => typeof t === 'string')])];
+  if (!st.friends.includes(st.partner)) st.partner = 'pao';
+  if (!st.themes.includes(st.theme)) st.theme = 'sky';
+  st.units = mapRecords(st.units, (u) => ({
+    ...u,
+    stars: Math.floor(count(u.stars, 0, 3)),
+    best: count(u.best),
+    plays: count(u.plays),
+    ex: Math.floor(count(u.ex, 0, 3)),
+  }));
+  st.qstats = mapRecords(st.qstats, (q) => ({ n: count(q.n), c: count(q.c), last: q.last === 0 ? 0 : 1 }));
+  st.subjects = mapRecords(st.subjects, (x) => ({ n: count(x.n), c: count(x.c) }));
+  st.unitStats = mapRecords(st.unitStats, (x) => ({
+    n: count(x.n),
+    c: count(x.c),
+    recent: Array.isArray(x.recent) ? x.recent.filter((v) => v === 0 || v === 1).slice(-RECENT_LEN) : [],
+  }));
+  st.notebook = mapRecords(st.notebook, fixNotebookEntry);
+  st.days = mapRecords(st.days, (d) => ({ sec: count(d.sec), n: count(d.n), c: count(d.c), coins: count(d.coins) }));
+
+  const set = st.settings;
+  const def = defaults.settings;
+  set.limitMin = count(set.limitMin, def.limitMin, 24 * 60);
+  set.breakMin = count(set.breakMin, def.breakMin, 24 * 60);
+  if (!EFFECT_LEVELS.includes(set.effects)) set.effects = def.effects;
+  if (typeof set.sound !== 'boolean') set.sound = def.sound;
+  if (typeof set.voice !== 'boolean') set.voice = def.voice;
+
+  st.extra = { date: typeof st.extra.date === 'string' ? st.extra.date : '', min: count(st.extra.min) };
+  if (st.pin !== null && !(typeof st.pin === 'string' && /^\d{4}$/.test(st.pin))) st.pin = null;
+  st.daily = { date: typeof st.daily.date === 'string' ? st.daily.date : '', cleared: st.daily.cleared === true };
+  return st;
 }
 
 export function createStore({ storage = safeStorage(), reducedMotion = false } = {}) {

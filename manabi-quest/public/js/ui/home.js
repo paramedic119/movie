@@ -2,10 +2,9 @@
 
 import { esc, onAct, minutesText } from './dom.js';
 import { titleFor } from '../game/rewards.js';
-import { dueEntries } from '../game/review.js';
 import { friendById } from '../game/shop.js';
 import { remainingSeconds, dayRecord, unitMastery, dateKey } from '../game/state.js';
-import { startReview, startDaily } from './session.js';
+import { startReview, startDaily, reviewableEntries } from './session.js';
 import { openModal } from './modal.js';
 import { withCommas } from '../lib/numfmt.js';
 
@@ -39,7 +38,7 @@ export function mountHome(root, ctx) {
   const now = ctx.now();
   const partner = friendById(st.partner);
   const title = titleFor(st.totalEarned);
-  const due = dueEntries(st.notebook, now).length;
+  const due = reviewableEntries(ctx).length;
   const remain = remainingSeconds(st, now);
   const today = dayRecord(st, now);
   const limitMin = st.settings.limitMin;

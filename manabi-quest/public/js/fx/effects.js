@@ -194,6 +194,7 @@ export function createFx({ layer, getLevel }) {
       canvas.width = w * dpr;
       canvas.height = h * dpr;
       const c2d = canvas.getContext('2d');
+      if (!c2d) return; // 描画できない環境では紙ふぶきなし
       c2d.setTransform(dpr, 0, 0, dpr, 0, 0);
       const parts = Array.from({ length: n }, () => ({
         x: Math.random() * w,

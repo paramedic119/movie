@@ -209,10 +209,10 @@ export function mountQuiz(root, ctx) {
       } else {
         hissan = createHissan($('#hissan', $card), q.hissan, {
           hintMode: s.stageKind === 'normal' && q.level === 1 ? 'auto' : 'onError',
-          onDigit: (ok, el) => {
-            if (ok) {
+          onDigit: (result, el) => {
+            if (result === 'ok' || result === 'fixed') {
               sfx.digit();
-              if (el) {
+              if (el && result === 'ok') {
                 const c = fx.centerOf(el);
                 fx.burst(c.x, c.y, { count: ctx.effectsLevel() === 'calm' ? 0 : 6 });
               }

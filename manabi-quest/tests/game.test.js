@@ -166,6 +166,49 @@ test('保存：読みこみ・こわれたデータ・初期値でうめる', ()
   assert.equal(defaultState({ reducedMotion: true }).settings.effects, 'calm', '動きをへらす設定の人は「おだやか」から');
 });
 
+test('保存データの一部がこわれていても、読みこんで遊べる', () => {
+  const now = Date.now();
+  const today = dateKey(now);
+  const good = { q: { id: 'rika-a-1', q: 'もんだい', kind: 'choice', choices: ['a', 'b'], answer: 'a' }, box: 1, due: now - 1, wrong: 1, added: now, last: now };
+  const raw = {
+    coins: -5,
+    friends: ['koala', 3, null],
+    partner: 'nobody',
+    units: { 'rika-a': { stars: 9, ex: '2' }, x: null },
+    unitStats: { 'rika-a': { n: 3, c: 2 }, 'rika-b': { recent: [1, 'x', 0] } },
+    qstats: { 'rika-a-1': 'oops' },
+    notebook: { x: null, y: { q: null }, z: { q: { id: 'other', q: 'a', kind: 'choice', choices: ['a'], answer: 'a' } }, 'rika-a-1': good },
+    days: { [today]: { sec: 100 } },
+    settings: { limitMin: '30', breakMin: -1, effects: 'wild', sound: 'yes' },
+    extra: { date: today },
+    pin: 1234,
+    daily: null,
+  };
+  const st = mergeWithDefaults(raw, defaultState());
+  assert.equal(st.coins, 0);
+  assert.deepEqual(st.friends, ['pao', 'koala']);
+  assert.equal(st.partner, 'pao');
+  assert.deepEqual(st.units, { 'rika-a': { stars: 3, best: 0, plays: 0, ex: 0 } });
+  assert.deepEqual(st.unitStats['rika-a'].recent, []);
+  assert.deepEqual(st.unitStats['rika-b'].recent, [1, 0]);
+  assert.deepEqual(Object.keys(st.notebook), ['rika-a-1'], '出題できないノートの記録は捨てる');
+  assert.deepEqual(st.qstats, {});
+  assert.deepEqual(st.days[today], { sec: 100, n: 0, c: 0, coins: 0 });
+  assert.equal(st.settings.limitMin, 30);
+  assert.equal(st.settings.breakMin, 20);
+  assert.equal(st.settings.effects, 'normal');
+  assert.equal(st.settings.sound, true);
+  assert.equal(st.extra.min, 0);
+  assert.equal(st.pin, null);
+  assert.deepEqual(st.daily, { date: '', cleared: false });
+  // こわれていた記録の上に、ふつうに記録できる
+  const q = { id: 'rika-a-2', subject: 'rika', unit: 'rika-a', kind: 'choice', choices: ['a', 'b'], answer: 'a' };
+  recordAnswer(st, q, true, now);
+  recordAnswer(st, { ...q, unit: 'rika-b' }, false, now);
+  assert.equal(remainingSeconds(st, now), 30 * 60 - 100);
+  assert.equal(dueEntries(st.notebook, now).length, 2);
+});
+
 test('答えの記録：成績・ノート・★・EX', () => {
   const st = defaultState();
   const now = Date.now();
