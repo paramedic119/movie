@@ -8,7 +8,7 @@ import path from 'node:path';
 import { validateSubject } from './lib/validate-content.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-export const BANK_FILES = ['kokugo', 'rika', 'shakai', 'eigo'];
+export const BANK_FILES = ['kokugo', 'kokugo-furikaeri', 'rika', 'shakai', 'eigo'];
 const ALL = BANK_FILES;
 const targets = process.argv.slice(2).length ? process.argv.slice(2) : ALL;
 

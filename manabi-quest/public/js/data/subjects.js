@@ -24,7 +24,7 @@ export const subjectById = (id) => SUBJECTS.find((s) => s.id === id);
 // 1つのファイルがこわれていても、ほかの教科は遊べるように別々に読みこむ。
 // 1つめが4年生の単元、2つめ以降（ふりかえり）は読みこめなくても4年生の単元は遊べる。
 const BANK_LOADERS = {
-  kokugo: [() => import('./kokugo.js')],
+  kokugo: [() => import('./kokugo.js'), () => import('./kokugo-furikaeri.js')],
   rika: [() => import('./rika.js')],
   shakai: [() => import('./shakai.js')],
   eigo: [() => import('./eigo.js')],

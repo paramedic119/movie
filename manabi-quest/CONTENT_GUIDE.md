@@ -6,6 +6,7 @@
 | 教科 | ファイル | 教科ID |
 | --- | --- | --- |
 | 国語 | `public/js/data/kokugo.js` | `kokugo` |
+| 国語（ふりかえり：1〜3年） | `public/js/data/kokugo-furikaeri.js` | `kokugo` |
 | 理科 | `public/js/data/rika.js` | `rika` |
 | 社会 | `public/js/data/shakai.js` | `shakai` |
 | 英語 | `public/js/data/eigo.js` | `eigo` |
@@ -17,6 +18,7 @@
 ```sh
 npm run check           # 全教科
 node scripts/check-content.mjs rika   # 1教科だけ
+node scripts/check-content.mjs kokugo-furikaeri   # 国語のふりかえり
 ```
 
 ## ファイルの形

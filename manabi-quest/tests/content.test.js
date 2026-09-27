@@ -8,10 +8,10 @@ import { loadAllSubjects, SUBJECTS } from '../public/js/data/subjects.js';
 import { createRng } from '../public/js/lib/rng.js';
 import { plainText } from '../public/js/lib/markup.js';
 
-for (const subject of ['kokugo', 'rika', 'shakai', 'eigo']) {
-  test(`${subject}：データの形・答え・漢字の学年`, async () => {
-    const data = (await import(`../public/js/data/${subject}.js`)).default;
-    const { errors, stats } = validateSubject(data, subject);
+for (const file of ['kokugo', 'kokugo-furikaeri', 'rika', 'shakai', 'eigo']) {
+  test(`${file}：データの形・答え・漢字の学年`, async () => {
+    const data = (await import(`../public/js/data/${file}.js`)).default;
+    const { errors, stats } = validateSubject(data, file.split('-')[0]);
     assert.deepEqual(errors, [], errors.join('\n'));
     assert.ok(stats.length >= 5, '5単元以上');
     for (const s of stats) {
@@ -20,6 +20,15 @@ for (const subject of ['kokugo', 'rika', 'shakai', 'eigo']) {
     }
   });
 }
+
+test('問題IDは、ファイルをまたいでも重複しない（ふりかえりもふくめて）', async () => {
+  const all = await loadAllSubjects();
+  const ids = Object.values(all).flatMap((s) => s.units.flatMap((u) => (u.questions ?? []).map((q) => q.id)));
+  assert.equal(ids.length, new Set(ids).size);
+  const kokugo = all.kokugo.units;
+  assert.ok(kokugo.some((u) => u.grade), '国語のふりかえりの単元を読みこめる');
+  for (const u of kokugo.filter((x) => x.grade)) assert.ok(u.gradeLabel, u.id);
+});
 
 test('すべての教科を読みこめて、単元IDが重複しない', async () => {
   const all = await loadAllSubjects();
