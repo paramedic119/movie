@@ -61,17 +61,21 @@ npm start          # → http://localhost:8080 をブラウザで開く
 
 ### A. Cloudflare Pages（おすすめ：ダッシュボードだけで設定でき、スマホからでもOK）
 
-1. [Cloudflare ダッシュボード](https://dash.cloudflare.com/) → **Workers & Pages** → **作成** → **Pages** → **Git に接続**
-2. GitHub のリポジトリ（このリポジトリ）を選ぶ
+1. [Cloudflare ダッシュボード](https://dash.cloudflare.com/) → **Workers & Pages** → **作成（Create application）** → **Pages** を選ぶ
+   （画面によっては下のほうの「Pages をデプロイしたい場合（Looking to deploy Pages?）」から）
+2. **既存の Git リポジトリをインポート（Import an existing Git repository）** → GitHub と接続し、このリポジトリを選ぶ
+   （はじめてのときは Cloudflare の GitHub アプリに、このリポジトリへのアクセスを許可します）
 3. ビルドの設定
-   - フレームワーク プリセット：**なし**
+   - プロジェクト名：**`manabi-quest`**（公開 URL になります。ほかの名前でも動きます）
+   - 本番ブランチ：まだ `main` にマージしていないときは **作業ブランチ**、マージ後は `main`
+   - フレームワーク プリセット：**なし（None）**
    - ビルド コマンド：**（空欄）**
    - ビルド出力ディレクトリ：**`public`**
-   - ルート ディレクトリ（詳細設定）：**`manabi-quest`**
-4. 「保存してデプロイ」→ `https://<プロジェクト名>.pages.dev` で公開されます
+   - ルート ディレクトリ（ビルドの詳細設定 / Root directory）：**`manabi-quest`** ← 忘れずに。リポジトリのいちばん上には別のアプリ（`app.py` など）があります
+4. 「保存してデプロイ（Save and Deploy）」→ 1〜2分で `https://<プロジェクト名>.pages.dev` に公開されます
 
-以後は、本番ブランチ（通常は `main`）にマージするたびに自動で更新されます。
-まだ `main` にマージしていないときは、Pages の設定で本番ブランチをこの作業ブランチにするか、プレビュー用の URL（ブランチごとに自動で作られます）で確認できます。
+以後は、本番ブランチに push するたびに自動で更新されます。ほかのブランチは、ブランチごとのプレビュー用 URL に公開されます。
+本番ブランチはあとから **設定 → ビルド → ブランチの管理（Branch control）** で変えられます。
 
 コマンドで公開する場合：
 
@@ -138,7 +142,6 @@ manabi-quest/
 │  ├─ _headers             Cloudflare Pages 用のヘッダー（キャッシュ・CSP）
 │  └─ manifest.webmanifest
 ├─ firebase.json           Firebase Hosting の設定
-├─ wrangler.toml           Cloudflare Pages の設定
 ├─ scripts/                問題チェック・ローカルサーバー
 ├─ tests/                  ユニットテスト
 └─ e2e/                    ブラウザでの通しテスト
