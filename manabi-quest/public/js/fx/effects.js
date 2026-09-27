@@ -1,15 +1,11 @@
-// 演出（コイン・キラキラ・紙ふぶき・バナー）
-// 演出の強さは設定で「おだやか / ふつう / にぎやか」を選べる。
-// 「おだやか」では動きの大きい演出を出さない（OS の「視差効果を減らす」設定の人も最初はこれ）。
+// 演出（コイン・キラキラ・紙ふぶき・バナー・看板・リボン・ふうせん など）
+// 演出は いつも いちばん派手に出す（設定で弱くすることは しない）。
+// ただし、点滅（フラッシュ）のような 強い光の演出は 使わない。
 
 import { withCommas } from '../lib/numfmt.js';
 
-// juice … 参考動画のような「派手な」演出の強さ（0=なし、1=ふつう、2=にぎやか）
-const LEVELS = {
-  calm: { particles: 0, coins: 0, confetti: 0, ring: false, juice: 0, streamers: 0, balloons: 0, explode: 0, fountain: 0 },
-  normal: { particles: 14, coins: 6, confetti: 70, ring: true, juice: 1, streamers: 5, balloons: 8, explode: 18, fountain: 10 },
-  exciting: { particles: 26, coins: 12, confetti: 150, ring: true, juice: 2, streamers: 9, balloons: 14, explode: 32, fountain: 20 },
-};
+// 1回の演出で出す数
+const FX = { particles: 26, coins: 12, confetti: 150, streamers: 9, balloons: 14, explode: 32, fountain: 20 };
 
 const SHAPES = ['★', '●', '♥', '✦', '▲'];
 const COLORS = ['#ff5d8f', '#ffc300', '#2f8dff', '#1fb574', '#8a63ff', '#ff8a1f'];
@@ -24,11 +20,10 @@ const centerOf = (el) => {
 };
 
 /**
- * @param {{layer:HTMLElement, back?:HTMLElement|null, getLevel:()=>string}} opts
+ * @param {{layer:HTMLElement, back?:HTMLElement|null}} opts
  *   layer … 画面の いちばん上（ボタンは押せる）。back … 画面の うしろ（ひかりの線・ふうせん）
  */
-export function createFx({ layer, back = null, getLevel }) {
-  const cfg = () => LEVELS[getLevel()] ?? LEVELS.normal;
+export function createFx({ layer, back = null }) {
   const add = (el) => {
     layer.appendChild(el);
     return el;
@@ -50,7 +45,7 @@ export function createFx({ layer, back = null, getLevel }) {
   const fx = {
     /** キラキラがはじける */
     burst(x, y, { count } = {}) {
-      const n = count ?? cfg().particles;
+      const n = count ?? FX.particles;
       for (let i = 0; i < n; i += 1) {
         const el = add(document.createElement('span'));
         el.className = 'fx-particle';
@@ -78,7 +73,6 @@ export function createFx({ layer, back = null, getLevel }) {
 
     /** にじ色のわっか */
     ring(x, y) {
-      if (!cfg().ring) return;
       const el = add(document.createElement('div'));
       el.className = 'fx-ring';
       el.style.left = `${x}px`;
@@ -102,15 +96,14 @@ export function createFx({ layer, back = null, getLevel }) {
       el.textContent = text;
       el.style.left = `${x}px`;
       el.style.top = `${y}px`;
-      const calm = getLevel() === 'calm';
       done(
         el.animate(
           [
             { transform: 'translate(-50%,-50%) scale(0.6)', opacity: 0 },
             { transform: 'translate(-50%,-90%) scale(1.15)', opacity: 1, offset: 0.25 },
-            { transform: `translate(-50%,${calm ? '-110%' : '-220%'}) scale(1)`, opacity: 0 },
+            { transform: 'translate(-50%,-220%) scale(1)', opacity: 0 },
           ],
-          { duration: calm ? 900 : 1100, easing: 'ease-out' },
+          { duration: 1100, easing: 'ease-out' },
         ),
         el,
       );
@@ -118,8 +111,8 @@ export function createFx({ layer, back = null, getLevel }) {
 
     /** コインが上のコイン表示へ飛んでいく。onEach は1まいとどくごとに呼ばれる */
     coins(fromEl, toEl, amount, onEach = () => {}) {
-      const n = Math.min(cfg().coins, Math.max(1, Math.ceil(amount / 8)));
-      if (!fromEl || !toEl || n === 0) {
+      const n = Math.min(FX.coins, Math.max(1, Math.ceil(amount / 8)));
+      if (!fromEl || !toEl) {
         onEach(0, 1);
         return Promise.resolve();
       }
@@ -172,21 +165,13 @@ export function createFx({ layer, back = null, getLevel }) {
       el.style.setProperty('--len', String(Math.max(4, [...text].length))); // 長い文字は小さくして画面におさめる
       el.querySelector('.fx-banner__sub').textContent = sub;
       const strip = el.firstElementChild;
-      const calm = getLevel() === 'calm';
-      const frames = calm
-        ? [
-            { opacity: 0, transform: 'translateY(-50%) scale(0.96)' },
-            { opacity: 1, transform: 'translateY(-50%) scale(1)', offset: 0.15 },
-            { opacity: 1, transform: 'translateY(-50%) scale(1)', offset: 0.85 },
-            { opacity: 0, transform: 'translateY(-50%) scale(1)' },
-          ]
-        : [
-            { transform: 'translate(-120%, -50%) rotate(-6deg)' },
-            { transform: 'translate(4%, -50%) rotate(-6deg)', offset: 0.18 },
-            { transform: 'translate(0, -50%) rotate(-6deg)', offset: 0.26 },
-            { transform: 'translate(0, -50%) rotate(-6deg)', offset: 0.8 },
-            { transform: 'translate(120%, -50%) rotate(-6deg)' },
-          ];
+      const frames = [
+        { transform: 'translate(-120%, -50%) rotate(-6deg)' },
+        { transform: 'translate(4%, -50%) rotate(-6deg)', offset: 0.18 },
+        { transform: 'translate(0, -50%) rotate(-6deg)', offset: 0.26 },
+        { transform: 'translate(0, -50%) rotate(-6deg)', offset: 0.8 },
+        { transform: 'translate(120%, -50%) rotate(-6deg)' },
+      ];
       const anim = strip.animate(frames, { duration: duration + 500, easing: 'ease-in-out', fill: 'forwards' });
       banners.add(anim);
       return new Promise((resolve) => {
@@ -206,14 +191,13 @@ export function createFx({ layer, back = null, getLevel }) {
       [...banners].forEach((anim) => anim.finish());
     },
 
-    // ---------- 参考動画のような 派手な演出（「おだやか」では出さない） ----------
+    // ---------- 参考動画のような 派手な演出 ----------
 
     /**
      * なかまが 上から ロープで ぶらさがって、看板を見せる（ゆらゆら ゆれて 上へ もどる）。
      * 下のボタンは そのまま押せる。前の看板は すぐに しまう
      */
     sign(text, { emoji = '🐘', variant = '' } = {}) {
-      if (!cfg().juice) return Promise.resolve();
       [...banners].filter((a) => a.sign).forEach((a) => a.finish());
       const el = add(document.createElement('div'));
       el.className = `fx-sign ${variant ? `fx-sign--${variant}` : ''}`;
@@ -248,8 +232,8 @@ export function createFx({ layer, back = null, getLevel }) {
 
     /** 色とりどりの リボンが 画面を ビュンと よこぎる */
     streamers(count) {
-      const n = count ?? cfg().streamers;
-      if (!n || !cfg().juice) return;
+      const n = count ?? FX.streamers;
+      if (!n) return;
       const w = globalThis.innerWidth;
       const h = globalThis.innerHeight;
       const svg = add(document.createElementNS(SVG_NS, 'svg'));
@@ -296,7 +280,6 @@ export function createFx({ layer, back = null, getLevel }) {
 
     /** 黄色い しょうげきはの わっか */
     shockwave(x, y, { color = '#ffc21a', size = 1 } = {}) {
-      if (!cfg().juice) return;
       const el = add(document.createElement('div'));
       el.className = 'fx-shock';
       el.style.left = `${x}px`;
@@ -316,10 +299,6 @@ export function createFx({ layer, back = null, getLevel }) {
 
     /** 「+15」「コンボ×1.5」のような ふきだしが ポンと出て うかぶ */
     scorePop(x, y, text, { variant = 'coin', delay = 0, dx = 0 } = {}) {
-      if (!cfg().juice) {
-        fx.floatText(x, y, text, 'coin-text');
-        return;
-      }
       const el = add(document.createElement('div'));
       el.className = `fx-pop fx-pop--${variant}`;
       el.textContent = text;
@@ -342,8 +321,8 @@ export function createFx({ layer, back = null, getLevel }) {
 
     /** コイン・ハート・星が ふんすいのように とびだして 落ちる */
     fountain(x, y, count) {
-      const n = count ?? cfg().fountain;
-      if (!n || !cfg().juice) return;
+      const n = count ?? FX.fountain;
+      if (!n) return;
       const h = globalThis.innerHeight;
       for (let i = 0; i < n; i += 1) {
         const el = add(document.createElement('span'));
@@ -376,8 +355,8 @@ export function createFx({ layer, back = null, getLevel }) {
 
     /** なかまや ハートが まん中から ドカンと とびちる */
     explode(x, y, emojis = ['🎉'], count) {
-      const n = count ?? cfg().explode;
-      if (!n || !cfg().juice) return;
+      const n = count ?? FX.explode;
+      if (!n) return;
       for (let i = 0; i < n; i += 1) {
         const el = add(document.createElement('span'));
         el.className = 'fx-emoji';
@@ -405,7 +384,6 @@ export function createFx({ layer, back = null, getLevel }) {
 
     /** 画面の うしろで ひかりの線が まわる（点めつは しない） */
     sunburst(ms = 1600) {
-      if (!cfg().juice) return;
       const el = addBack(document.createElement('div'));
       el.className = 'fx-sunburst';
       done(
@@ -424,8 +402,8 @@ export function createFx({ layer, back = null, getLevel }) {
 
     /** 画面の うしろを 大きな ふうせんが のぼっていく */
     balloons(count) {
-      const n = count ?? cfg().balloons;
-      if (!n || !cfg().juice) return;
+      const n = count ?? FX.balloons;
+      if (!n) return;
       const w = globalThis.innerWidth;
       const h = globalThis.innerHeight;
       for (let i = 0; i < n; i += 1) {
@@ -451,7 +429,7 @@ export function createFx({ layer, back = null, getLevel }) {
 
     /** ぷるんと はずむ（正解の カードなど） */
     bounce(el) {
-      if (!el || !cfg().juice) return;
+      if (!el) return;
       el.animate(
         [
           { transform: 'scale(1)' },
@@ -466,10 +444,6 @@ export function createFx({ layer, back = null, getLevel }) {
     /** カードが ななめに かたむきながら とびこんでくる */
     flyIn(el, { strong = false } = {}) {
       if (!el) return;
-      if (!cfg().juice) {
-        el.animate([{ opacity: 0, transform: 'translateY(12px)' }, { opacity: 1, transform: 'none' }], { duration: 260, easing: 'ease-out' });
-        return;
-      }
       const t = strong ? 'translateY(140px) rotate(-12deg) scale(0.6)' : 'translateY(60px) rotate(-5deg) scale(0.85)';
       el.animate(
         [
@@ -484,7 +458,7 @@ export function createFx({ layer, back = null, getLevel }) {
 
     /** 筆算の答えの数字が 大きく出て、マスに すいこまれる */
     digitPop(el, digit) {
-      if (!el || !cfg().juice) return;
+      if (!el) return;
       const c = centerOf(el);
       const big = add(document.createElement('div'));
       big.className = 'fx-digit';
@@ -509,10 +483,6 @@ export function createFx({ layer, back = null, getLevel }) {
     stamp(el) {
       if (!el) return;
       el.classList.add('on');
-      if (getLevel() === 'calm') {
-        el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 250 });
-        return;
-      }
       el.animate(
         [
           { transform: 'scale(2.6) rotate(-30deg)', opacity: 0 },
@@ -526,7 +496,7 @@ export function createFx({ layer, back = null, getLevel }) {
 
     /** 「ドン」と下にゆれる */
     thud(el) {
-      if (!el || getLevel() === 'calm') return;
+      if (!el) return;
       el.animate([{ transform: 'translateY(0)' }, { transform: 'translateY(5px)' }, { transform: 'translateY(-2px)' }, { transform: 'translateY(0)' }], {
         duration: 260,
         easing: 'ease-out',
@@ -535,8 +505,7 @@ export function createFx({ layer, back = null, getLevel }) {
 
     /** 紙ふぶき */
     confetti(ms = 1800) {
-      const n = cfg().confetti;
-      if (!n) return;
+      const n = FX.confetti;
       if (!canvas) {
         canvas = document.createElement('canvas');
         canvas.className = 'fx-confetti';
@@ -587,7 +556,7 @@ export function createFx({ layer, back = null, getLevel }) {
 
     shake(el) {
       if (!el) return;
-      const d = getLevel() === 'calm' ? 3 : 8;
+      const d = 8;
       el.animate(
         [
           { transform: 'translateX(0)' },
@@ -601,7 +570,7 @@ export function createFx({ layer, back = null, getLevel }) {
     },
 
     pop(el) {
-      if (!el || getLevel() === 'calm') return;
+      if (!el) return;
       el.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.25)' }, { transform: 'scale(1)' }], {
         duration: 280,
         easing: 'ease-out',
@@ -610,7 +579,6 @@ export function createFx({ layer, back = null, getLevel }) {
 
     /** なかまがジャンプ（power が大きいほど 高く。3 からは くるっと回る） */
     hop(els, power = 1) {
-      if (getLevel() === 'calm') return;
       const jump = 18 + Math.min(power, 4) * 7;
       els.forEach((el, i) => {
         const tilt = (i % 2 ? 1 : -1) * (6 + power * 3);
@@ -630,7 +598,7 @@ export function createFx({ layer, back = null, getLevel }) {
     /** 数字をカウントアップ */
     countUp(el, from, to, ms = 700) {
       if (!el) return;
-      if (getLevel() === 'calm' || from === to) {
+      if (from === to) {
         el.textContent = withCommas(to);
         return;
       }

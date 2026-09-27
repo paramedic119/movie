@@ -6,7 +6,7 @@ export const STORAGE_KEY = 'manabi-quest:v1';
 const DAYS_TO_KEEP = 120;
 const RECENT_LEN = 20;
 
-export function defaultState({ reducedMotion = false } = {}) {
+export function defaultState() {
   return {
     v: 1,
     createdAt: Date.now(),
@@ -26,7 +26,6 @@ export function defaultState({ reducedMotion = false } = {}) {
     settings: {
       limitMin: 30,
       breakMin: 20,
-      effects: reducedMotion ? 'calm' : 'normal',
       sound: true,
       voice: true,
       golden: true,
@@ -81,8 +80,6 @@ export function mergeWithDefaults(raw, defaults) {
 }
 
 // ---------- 読みこんだデータの中身をととのえる（こわれた記録があっても起動できるように） ----------
-
-const EFFECT_LEVELS = ['calm', 'normal', 'exciting'];
 
 /** 0以上の有限の数（ちがえば def）。max をこえたら max */
 function count(v, def = 0, max = Infinity) {
@@ -150,7 +147,7 @@ export function sanitizeState(st, defaults = defaultState()) {
   const def = defaults.settings;
   set.limitMin = count(set.limitMin, def.limitMin, 24 * 60);
   set.breakMin = count(set.breakMin, def.breakMin, 24 * 60);
-  if (!EFFECT_LEVELS.includes(set.effects)) set.effects = def.effects;
+  delete set.effects; // 前の版の「演出の強さ」の設定（いまは いつも派手な演出）
   if (typeof set.sound !== 'boolean') set.sound = def.sound;
   if (typeof set.voice !== 'boolean') set.voice = def.voice;
   if (typeof set.golden !== 'boolean') set.golden = def.golden;
@@ -191,8 +188,8 @@ function fixMissions(m) {
   };
 }
 
-export function createStore({ storage = safeStorage(), reducedMotion = false } = {}) {
-  const defaults = defaultState({ reducedMotion });
+export function createStore({ storage = safeStorage() } = {}) {
+  const defaults = defaultState();
   let state = defaults;
   let loadError = null;
   try {
@@ -222,7 +219,7 @@ export function createStore({ storage = safeStorage(), reducedMotion = false } =
       store.save();
     },
     reset() {
-      state = defaultState({ reducedMotion });
+      state = defaultState();
       store.save();
     },
     subscribe(fn) {

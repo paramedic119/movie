@@ -32,8 +32,7 @@ const ROUTES = {
 
 async function boot() {
   const debug = new URLSearchParams(location.search).has('debug');
-  const reducedMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-  const store = createStore({ reducedMotion });
+  const store = createStore();
   pruneDays(store.state, Date.now());
 
   const screen = document.getElementById('screen');
@@ -67,7 +66,6 @@ async function boot() {
     subjectMeta: (id) => subjectById(id) ?? MODE_META[id],
     unitById: (id) => unitIndex.get(id),
     questionById: (id) => questionIndex.get(id),
-    effectsLevel: () => store.state.settings.effects,
     friendCtx: () => ({
       subjectIds: SUBJECTS.map((s) => s.id),
       unitIdsBySubject: Object.fromEntries(Object.entries(subjects).map(([id, s]) => [id, s.units.filter(isGrade4).map((u) => u.id)])),
@@ -88,16 +86,11 @@ async function boot() {
       const set = store.state.settings;
       sfx.setEnabled(set.sound);
       speech.setEnabled(set.voice);
-      document.body.dataset.effects = set.effects;
       refreshHud();
     },
     refreshHud,
   };
-  ctx.fx = createFx({
-    layer: document.getElementById('fx-layer'),
-    back: document.getElementById('fx-back'),
-    getLevel: () => store.state.settings.effects,
-  });
+  ctx.fx = createFx({ layer: document.getElementById('fx-layer'), back: document.getElementById('fx-back') });
 
   let warned = false;
   ctx.playtime = createPlaytime({

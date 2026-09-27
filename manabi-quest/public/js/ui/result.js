@@ -80,18 +80,15 @@ export function mountResult(root, ctx) {
   // まちがいが2問以上（または★1つ以下）のときは、もとになる下の学年の単元をおすすめ（EX・リベンジはのぞく）
   const struggled = !timeUp && !r.stageKind.startsWith('ex') && r.stageKind !== 'revenge' && (wrong.length >= 2 || r.stars <= 1);
   const furikaeri = struggled ? furikaeriFor([...new Set(wrong.map((x) => x.q.unit))], ctx.unitById).slice(0, 2) : [];
-  const calm = ctx.effectsLevel() === 'calm';
   const treasure = r.chest ?? { rank: 0, coins: 0, steps: [] };
-  // たからばこは 銅から出てきて、ランクが1つずつ上がる（おだやかでは さいしょから そのランク）
-  const rankUps = calm ? 0 : Math.max(0, treasure.steps.length - 1);
-  const firstRank = calm ? treasure.rank : (treasure.steps[0]?.rank ?? treasure.rank);
+  // たからばこは 銅から出てきて、ランクが1つずつ上がる
+  const rankUps = Math.max(0, treasure.steps.length - 1);
+  const firstRank = treasure.steps[0]?.rank ?? treasure.rank;
   // 演出のタイミング（ミリ秒）：★ → ハンコ → たからばこ（ランクアップ）→ しょうごうゲージ → EXパネル
-  const T = calm ? { star: 0, stamp: 150, chest: 300, ready: 300, gauge: 450, ex: 0 } : { star: 250, stamp: 950, chest: 1450 };
-  if (!calm) {
-    T.ready = T.chest + rankUps * RANK_STEP_MS;
-    T.gauge = Math.max(1900, T.ready + 450);
-    T.ex = T.gauge + 600;
-  }
+  const T = { star: 250, stamp: 950, chest: 1450 };
+  T.ready = T.chest + rankUps * RANK_STEP_MS;
+  T.gauge = Math.max(1900, T.ready + 450);
+  T.ex = T.gauge + 600;
   // 「もういちど」で同じステージに ちょうせんできるときだけ（EX・リベンジは「もういちど」が ふつうのステージになるので出さない）
   const nearMiss = !perfect && !timeUp && r.total >= 3 && r.correct === r.total - 1 && r.stageKind !== 'revenge' && !r.stageKind.startsWith('ex');
   const partner = friendById(ctx.store.state.partner);
@@ -253,7 +250,7 @@ export function mountResult(root, ctx) {
     later(() => {
       sfx.star(i);
       const c = fx.centerOf(el);
-      fx.burst(c.x, c.y, { count: calm ? 0 : 6 });
+      fx.burst(c.x, c.y, { count: 6 });
     }, T.star + i * 220);
   });
 
@@ -329,7 +326,7 @@ export function mountResult(root, ctx) {
       el.disabled = false;
       el.classList.add('ready');
     }, T.ready);
-    later(openChest, T.ready + (calm ? 0 : 1300));
+    later(openChest, T.ready + 1300);
   }
 
   // しょうごうゲージがのびる（しょうごうが上がったら おいわい）
@@ -338,7 +335,7 @@ export function mountResult(root, ctx) {
     const bar = $('.gauge__bar i', root);
     if (!gauge || !bar) return;
     const grow = (a, b, ms) =>
-      bar.animate([{ transform: `scaleX(${a})` }, { transform: `scaleX(${b})` }], { duration: calm ? 1 : ms, easing: 'cubic-bezier(.3,.8,.3,1)', fill: 'forwards' });
+      bar.animate([{ transform: `scaleX(${a})` }, { transform: `scaleX(${b})` }], { duration: ms, easing: 'cubic-bezier(.3,.8,.3,1)', fill: 'forwards' });
     if (gTo.index === gFrom.index) {
       if (gTo.progress > gFrom.progress) {
         sfx.gauge();
@@ -358,7 +355,7 @@ export function mountResult(root, ctx) {
       fx.burst(c.x, c.y);
       const e = fx.centerOf($('.gauge__emoji', gauge));
       fx.explode(e.x, e.y, [gTo.current.emoji, '✨', '⭐'], 14);
-      if (!calm) fx.banner('しょうごう アップ！', { sub: `${gTo.current.emoji} ${gTo.current.name}`, variant: 'gold', duration: 1100, pass: true });
+      fx.banner('しょうごう アップ！', { sub: `${gTo.current.emoji} ${gTo.current.name}`, variant: 'gold', duration: 1100, pass: true });
       grow(0, gTo.progress, 700);
     };
   }

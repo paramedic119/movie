@@ -136,7 +136,11 @@ export function mountParent(root, ctx) {
         form.pin.value = '';
       }
     });
-    setTimeout(() => form.pin.focus(), 50);
+    // 画面の切りかえ（main.js の screen.focus）が終わった すぐあとに、1つめの入力へ。
+    // 時間をおくと、入力している とちゅうで フォーカスが もどってしまうことがある
+    queueMicrotask(() => {
+      if (form.isConnected && !form.contains(document.activeElement)) form.pin.focus();
+    });
   }
 
   function renderDashboard() {
@@ -249,19 +253,6 @@ export function mountParent(root, ctx) {
           <label class="setting"><span>休けいのお知らせ（続けて遊んだとき）</span>
             <select data-setting="breakMin">${BREAK_OPTIONS.map((m) => `<option value="${m}" ${set.breakMin === m ? 'selected' : ''}>${m ? `${m}分ごと` : 'なし'}</option>`).join('')}</select>
           </label>
-          <fieldset class="setting">
-            <legend>演出の強さ</legend>
-            <div class="seg">
-              ${[
-                ['calm', 'おだやか'],
-                ['normal', 'ふつう'],
-                ['exciting', 'にぎやか'],
-              ]
-                .map(([v, l]) => `<label class="seg__opt"><input type="radio" name="effects" value="${v}" ${set.effects === v ? 'checked' : ''} data-setting="effects"><span>${l}</span></label>`)
-                .join('')}
-            </div>
-            <p class="small muted">「おだやか」はコインが飛ぶ・紙ふぶき・看板・リボン・ふうせんなどの動きを止め、刺激をおさえます。「にぎやか」はリボンや紙ふぶきが最も多くなります。</p>
-          </fieldset>
           <label class="setting setting--row"><span>ゴールデン問題<small class="setting__note">ときどき出る、正解するとコインが3倍になる問題</small></span><input type="checkbox" class="toggle" data-setting="golden" ${set.golden ? 'checked' : ''}></label>
           <label class="setting setting--row"><span>効果音</span><input type="checkbox" class="toggle" data-setting="sound" ${set.sound ? 'checked' : ''}></label>
           <label class="setting setting--row"><span>英語の読み上げ</span><input type="checkbox" class="toggle" data-setting="voice" ${set.voice ? 'checked' : ''}></label>
@@ -285,7 +276,7 @@ export function mountParent(root, ctx) {
             <li>毎日の「ミッション」（3つ）と、1週間の「がんばりスタンプ」で、毎日少しずつ続ける目標をつくっています。ミッションには、まちがいノートの復習や、正答率の低い教科・下の学年のふりかえりが多めに出ます。休んでも減るものはありません。</li>
             <li>まちがえた問題には必ず解説を表示し、「まちがいノート」で間隔をあけて復習させます。</li>
             <li>コインで買える「なかま」は値段が決まっており、くじ引き（ガチャ）のような運まかせの仕組みはありません。</li>
-            <li>1日の時間の上限・休けいのお知らせ・演出の強さを、このページで調整できます。</li>
+            <li>1日の時間の上限・休けいのお知らせを、このページで調整できます。演出はいつも派手に出ますが、点滅（フラッシュ）のような強い光の演出は使っていません。</li>
             <li>記録はこの端末のブラウザの中にだけ保存され、外部には送信されません。</li>
           </ul>
         </div>

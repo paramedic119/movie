@@ -837,7 +837,6 @@ body[data-theme='space'] .combo { color: #fff; }
 .hs-left { text-align: center; font-size: 12px; font-weight: 800; color: var(--ink-soft); margin-top: 2px; }
 /* のこり1けた：参考動画のような こい色の ふきだし */
 .hs-left .last { display: inline-block; font-size: 14px; color: #fff; background: var(--navy); border: 2px solid var(--ink); border-radius: 999px; padding: 0 12px; animation: pulse 0.9s ease-in-out infinite; }
-body[data-effects='calm'] .hs-left .last { animation: none; }
 
 /* 答えたあとのシート */
 .feedback {
@@ -1387,7 +1386,6 @@ body.fever-on .fx-back::before {
     radial-gradient(circle at 28% 76%, rgba(255, 210, 63, 0.36), transparent 32%);
   animation: party-drift 5s ease-in-out infinite alternate;
 }
-body[data-effects='calm'].fever-on .fx-back::before { display: none; }
 .quiz.fever .cheer__f:nth-child(2) { animation-delay: 0.12s; }
 .quiz.fever .cheer__f:nth-child(3) { animation-delay: 0.24s; }
 .quiz.fever .cheer__f:nth-child(4) { animation-delay: 0.36s; }
@@ -1480,35 +1478,6 @@ body[data-effects='calm'].fever-on .fx-back::before { display: none; }
 @keyframes golden-shine { 0% { background-position: 150% 0; } 55%, 100% { background-position: -60% 0; } }
 @keyframes last-glow { 0%, 100% { box-shadow: 0 6px 0 var(--ink), 0 0 0 0 rgba(255, 194, 26, 0); } 50% { box-shadow: 0 6px 0 var(--ink), 0 0 0 7px rgba(255, 194, 26, 0.55); } }
 
-/* 「おだやか」：くり返し動くアニメーションを止める */
-body[data-effects='calm'] .hero__partner,
-body[data-effects='calm'] .partner-card__emoji,
-body[data-effects='calm'] .dots li.now,
-body[data-effects='calm'] .hs-box.active,
-body[data-effects='calm'] .zzz,
-body[data-effects='calm'] .quiz.fever .qcard,
-body[data-effects='calm'] .quiz.fever .cheer__f,
-body[data-effects='calm'] .qcard--last,
-body[data-effects='calm'] .last-one,
-body[data-effects='calm'] .chest.ready,
-body[data-effects='calm'] .chest.open .chest__rays,
-body[data-effects='calm'] .ex-panel,
-body[data-effects='calm'] .ex-panel__stripe::after,
-body[data-effects='calm'] .ex-panel .btn--ex,
-body[data-effects='calm'] .qcard--golden,
-body[data-effects='calm'] .chest--r3 .chest__rays,
-body[data-effects='calm'] .chest--r4 .chest__rays,
-body[data-effects='calm'] .btn--claim,
-body[data-effects='calm'] .btn--near,
-body[data-effects='calm'] .next-friend.ready { animation: none; }
-body[data-effects='calm'] .qcard--golden { box-shadow: 0 6px 0 #b87800, 0 0 0 3px rgba(255, 194, 26, 0.7); }
-body[data-effects='calm'] .qcard--golden::after { display: none; }
-body[data-effects='calm'] .result-stars .star.on { animation: none; }
-body[data-effects='calm'] .feedback { animation: fade-in 0.2s; }
-
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
-}
 
 /* 横長の大きな画面（タブレットの横向き・パソコン）：問題カードと答えるところを左右にならべる */
 @media (min-width: 900px) and (orientation: landscape) {

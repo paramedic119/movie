@@ -215,8 +215,7 @@ export function mountHome(root, ctx) {
     if (res.bonus) {
       later(() => {
         sfx.levelUp();
-        if (ctx.effectsLevel() !== 'calm') fx.banner('ミッション コンプリート！', { sub: `ボーナス ＋${res.bonus}`, variant: 'gold', duration: 1100, pass: true });
-        else toast(`🎉 ミッション コンプリート！ ボーナス ＋${res.bonus}`);
+        fx.banner('ミッション コンプリート！', { sub: `ボーナス ＋${res.bonus}`, variant: 'gold', duration: 1100, pass: true });
         fx.confetti(1600);
         fx.streamers();
         const m = fx.centerOf(card);

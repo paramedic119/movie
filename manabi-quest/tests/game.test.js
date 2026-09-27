@@ -210,7 +210,8 @@ test('保存：読みこみ・こわれたデータ・初期値でうめる', ()
   assert.equal(merged.settings.limitMin, 45);
   assert.equal(merged.settings.sound, true, 'たりない設定は初期値');
   assert.deepEqual(merged.friends, ['pao', 'koala']);
-  assert.equal(defaultState({ reducedMotion: true }).settings.effects, 'calm', '動きをへらす設定の人は「おだやか」から');
+  assert.equal('effects' in defaultState().settings, false, '演出の強さの設定はない（いつも派手な演出）');
+  assert.equal(mergeWithDefaults({ settings: { effects: 'calm' } }, defaultState()).settings.effects, undefined, '前の版で「おだやか」にしていても 消す');
 });
 
 test('保存データの一部がこわれていても、読みこんで遊べる', () => {
@@ -243,7 +244,7 @@ test('保存データの一部がこわれていても、読みこんで遊べ�
   assert.deepEqual(st.days[today], { sec: 100, n: 0, c: 0, coins: 0, stages: 0 });
   assert.equal(st.settings.limitMin, 30);
   assert.equal(st.settings.breakMin, 20);
-  assert.equal(st.settings.effects, 'normal');
+  assert.equal(st.settings.effects, undefined, '前の版の 演出の設定は すてる');
   assert.equal(st.settings.sound, true);
   assert.equal(st.extra.min, 0);
   assert.equal(st.pin, null);

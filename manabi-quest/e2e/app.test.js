@@ -30,8 +30,8 @@ const SEEN_GUIDE = () => {
   if (!localStorage.getItem('manabi-quest:v1')) localStorage.setItem('manabi-quest:v1', JSON.stringify({ v: 1, seenGuide: true }));
 };
 
-async function openApp({ width = 390, height = 844, init = SEEN_GUIDE } = {}) {
-  const context = await browser.newContext({ viewport: { width, height } });
+async function openApp({ width = 390, height = 844, init = SEEN_GUIDE, reducedMotion } = {}) {
+  const context = await browser.newContext({ viewport: { width, height }, ...(reducedMotion ? { reducedMotion } : {}) });
   await context.route(/^https?:\/\/(?!localhost)/, (r) => r.abort());
   if (init) await context.addInitScript(init);
   const page = await context.newPage();
@@ -213,19 +213,21 @@ test('1日の時間になったら「きょうは ここまで」', async () => 
   await context.close();
 });
 
-test('おうちの方ページ：暗証番号と設定（演出を おだやかに）', async () => {
+test('おうちの方ページ：暗証番号と設定（演出の強さは えらばない）', async () => {
   const { page, context } = await openApp();
   await page.click('[data-tab="parent"]');
+  await page.waitForFunction(() => document.activeElement?.name === 'pin');
   await page.fill('input[name="pin"]', '2468');
   await page.fill('input[name="pin2"]', '2468');
   await page.click('.gate__form button[type="submit"]');
   await page.waitForSelector('.kpi-row');
-  await page.click('.seg__opt:has(input[value="calm"])');
-  await page.waitForFunction(() => document.body.dataset.effects === 'calm');
+  assert.equal(await page.$('input[name="effects"]'), null, '演出の強さの設定はない');
+  await page.click('input[data-setting="sound"]');
   await page.selectOption('select[data-setting="limitMin"]', '45');
   const settings = await page.evaluate(() => globalThis.__mq.store.state.settings);
-  assert.equal(settings.effects, 'calm');
+  assert.equal(settings.sound, false);
   assert.equal(settings.limitMin, 45);
+  assert.equal(settings.effects, undefined);
   await page.click('[data-tab="home"]');
   await page.click('[data-tab="parent"]');
   await page.waitForSelector('.gate');
@@ -521,19 +523,7 @@ test('がんばりスタンプ：ステージを クリアした日に1つ（け
   await context.close();
 });
 
-test('演出「おだやか」：たからばこは すぐに さいごのランクで ひらく', async () => {
-  const { page, context } = await openApp({
-    init: () => localStorage.setItem('manabi-quest:v1', JSON.stringify({ v: 1, seenGuide: true, settings: { effects: 'calm' } })),
-  });
-  await noGolden(page);
-  await page.click('.subject-card[data-id="rika"]');
-  await page.click('.unit-card');
-  await playStage(page, 5);
-  await page.waitForSelector('.chest.chest--r3.open', { timeout: 3000 });
-  await context.close();
-});
-
-test('派手な演出：正解で 看板・ふきだし・リボン、EXの入口で ひかりの線とふうせん（「おだやか」では出さない）', async () => {
+test('派手な演出：正解で 看板・ふきだし・リボン、EXの入口で ひかりの線とふうせん（いつも出す）', async () => {
   const fxCount = (page) =>
     page.evaluate(() => ({
       sign: document.querySelectorAll('#fx-layer .fx-sign').length,
@@ -557,16 +547,21 @@ test('派手な演出：正解で 看板・ふきだし・リボン、EXの入�
   assert.deepEqual(errors, []);
   await context.close();
 
-  const calm = await openApp({
+  // 前の版で「おだやか」にしていた記録・端末の「視差効果を減らす」設定でも、同じように派手に出す
+  const old = await openApp({
+    reducedMotion: 'reduce',
     init: () => localStorage.setItem('manabi-quest:v1', JSON.stringify({ v: 1, seenGuide: true, settings: { effects: 'calm' } })),
   });
-  await noGolden(calm.page);
-  await calm.page.click('.subject-card[data-id="rika"]');
-  await calm.page.click('.unit-card');
-  for (let i = 0; i < 3; i += 1) await answer(calm.page, true, { next: i < 2 });
-  assert.deepEqual(await fxCount(calm.page), { sign: 0, pop: 0, streamers: 0, back: 0 }, '「おだやか」では出さない');
-  assert.deepEqual(calm.errors, []);
-  await calm.context.close();
+  await noGolden(old.page);
+  await old.page.click('.subject-card[data-id="rika"]');
+  await old.page.click('.unit-card');
+  await answer(old.page, true, { next: false });
+  const shown = await fxCount(old.page);
+  assert.ok(shown.sign >= 1 && shown.pop >= 1, `看板とふきだし ${JSON.stringify(shown)}`);
+  await old.page.waitForSelector('#fx-layer .fx-streamers', { state: 'attached' });
+  assert.equal(await old.page.evaluate(() => globalThis.__mq.store.state.settings.effects), undefined);
+  assert.deepEqual(old.errors, []);
+  await old.context.close();
 });
 
 test('おうちの方ページ：ゴールデン問題をオフにできる', async () => {
@@ -575,6 +570,7 @@ test('おうちの方ページ：ゴールデン問題をオフにできる', as
   });
   await page.evaluate(() => (globalThis.__mq.goldenRate = 1));
   await page.click('[data-tab="parent"]');
+  await page.waitForFunction(() => document.activeElement?.name === 'pin');
   await page.fill('input[name="pin"]', '1234');
   await page.click('.gate__form button[type="submit"]');
   await page.click('input[data-setting="golden"]');
