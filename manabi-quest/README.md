@@ -69,6 +69,7 @@ npm start          # → http://localhost:8080 をブラウザで開く
 4. 「保存してデプロイ」→ `https://<プロジェクト名>.pages.dev` で公開されます
 
 以後は、本番ブランチ（通常は `main`）にマージするたびに自動で更新されます。
+まだ `main` にマージしていないときは、Pages の設定で本番ブランチをこの作業ブランチにするか、プレビュー用の URL（ブランチごとに自動で作られます）で確認できます。
 
 コマンドで公開する場合：
 
@@ -99,6 +100,8 @@ npx firebase-tools deploy --only hosting --project <プロジェクトID>
 | --- | --- |
 | Cloudflare Pages | `CLOUDFLARE_API_TOKEN`（Pages の編集権限）、`CLOUDFLARE_ACCOUNT_ID` |
 | Firebase Hosting | `FIREBASE_SERVICE_ACCOUNT`（サービスアカウントの JSON）、`FIREBASE_PROJECT_ID` |
+
+※ GitHub の仕様で、「Run workflow」ボタンはこのワークフローが既定のブランチ（通常は `main`）に入ってから表示されます。
 
 ## テスト
 
