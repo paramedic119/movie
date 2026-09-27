@@ -1,0 +1,21 @@
+{
+  "name": "manabi-quest",
+  "version": "1.0.0",
+  "private": true,
+  "description": "小学4年生向け 5教科の学習ゲーム「まなびクエスト」",
+  "type": "module",
+  "scripts": {
+    "start": "node scripts/serve.mjs",
+    "check": "node scripts/check-content.mjs",
+    "test": "node --test tests/*.test.js",
+    "e2e": "node --test --test-concurrency=1 e2e/*.test.js",
+    "deploy:cloudflare": "npx wrangler pages deploy public --project-name manabi-quest",
+    "deploy:firebase": "npx firebase-tools deploy --only hosting"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.56.1"
+  }
+}

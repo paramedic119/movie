@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8fd3ff"/>
+      <stop offset="1" stop-color="#fff1c2"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <g fill="#ffffff" fill-opacity="0.6">
+    <circle cx="96" cy="112" r="10"/><circle cx="420" cy="96" r="8"/><circle cx="440" cy="300" r="10"/><circle cx="70" cy="330" r="8"/>
+  </g>
+  <!-- ひらいた本 -->
+  <path d="M96 318 C170 290 226 300 256 330 C286 300 342 290 416 318 L416 426 C342 398 286 408 256 438 C226 408 170 398 96 426 Z" fill="#ffffff" stroke="#2b2a4c" stroke-width="16" stroke-linejoin="round"/>
+  <path d="M256 330 L256 438" stroke="#2b2a4c" stroke-width="12" stroke-linecap="round"/>
+  <path d="M134 346 C170 334 204 336 230 350 M134 378 C170 366 204 368 230 382 M282 350 C308 336 342 334 378 346 M282 382 C308 368 342 366 378 378" stroke="#b9b5d0" stroke-width="10" stroke-linecap="round" fill="none"/>
+  <!-- 星 -->
+  <path d="M256 70 L290 150 L376 156 L310 212 L331 296 L256 250 L181 296 L202 212 L136 156 L222 150 Z" fill="#ffd23f" stroke="#2b2a4c" stroke-width="16" stroke-linejoin="round"/>
+  <circle cx="232" cy="186" r="10" fill="#2b2a4c"/>
+  <circle cx="280" cy="186" r="10" fill="#2b2a4c"/>
+  <path d="M236 214 Q256 232 276 214" stroke="#2b2a4c" stroke-width="9" stroke-linecap="round" fill="none"/>
+  <circle cx="214" cy="210" r="9" fill="#ff8fb8"/>
+  <circle cx="298" cy="210" r="9" fill="#ff8fb8"/>
+</svg>

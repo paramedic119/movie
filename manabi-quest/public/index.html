@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>まなびクエスト 4年生</title>
+    <meta name="description" content="小学4年生の国語・算数・理科・社会・英語を、ゲーム感覚でくり返し学べる学習アプリ。" />
+    <meta name="theme-color" content="#ffd23f" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="まなびクエスト" />
+    <meta name="format-detection" content="telephone=no" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Klee+One:wght@600&family=M+PLUS+Rounded+1c:wght@500;700;800&display=swap"
+    />
+    <link rel="stylesheet" href="css/style.css" />
+    <script type="module" src="js/main.js"></script>
+  </head>
+  <body data-theme="sky" data-mode="normal">
+    <div class="app" id="app">
+      <header class="hud" id="hud">
+        <a class="hud__logo" href="#/" aria-label="まなびクエスト ホームへ">
+          <span class="hud__logo-mark" aria-hidden="true">★</span>
+          <span class="hud__logo-text">まなびクエスト<small>4年生</small></span>
+        </a>
+        <span class="hud__time" id="hud-time" hidden></span>
+        <span class="coin-pill" id="hud-coins" aria-label="コイン"><span class="coin" aria-hidden="true"></span><b id="hud-coin-count">0</b></span>
+      </header>
+      <main class="screen" id="screen" tabindex="-1">
+        <div class="boot">
+          <div class="boot__mark" aria-hidden="true">🐘</div>
+          <p>よみこみ中…</p>
+        </div>
+      </main>
+      <nav class="tabbar" id="tabbar" aria-label="メニュー">
+        <a href="#/" data-tab="home"><span aria-hidden="true">🏠</span>ホーム</a>
+        <a href="#/note" data-tab="note"><span aria-hidden="true">📒</span>ノート</a>
+        <a href="#/friends" data-tab="friends"><span aria-hidden="true">🐾</span>なかま</a>
+        <a href="#/parent" data-tab="parent"><span aria-hidden="true">👪</span>おうちの人</a>
+      </nav>
+    </div>
+    <div class="fx-layer" id="fx-layer" aria-hidden="true"></div>
+    <div id="modal-root"></div>
+    <noscript>
+      <p class="noscript">このアプリを使うには JavaScript を オンにしてください。</p>
+    </noscript>
+  </body>
+</html>
